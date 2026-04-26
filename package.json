@@ -1,0 +1,21 @@
+{
+  "name": "claude-switch",
+  "version": "2.0.0",
+  "description": "Claude Code 套餐管理工具 - CLI + Web 管理端，支持日志备份和一键还原",
+  "main": "lib/profile-manager.js",
+  "bin": {
+    "claude-switch": "./index.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "cli": "node index.js"
+  },
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "commander": "^11.1.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "fs-extra": "^11.2.0",
+    "inquirer": "^8.2.5"
+  }
+}

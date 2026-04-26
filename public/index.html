@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Claude Switch 套餐管理</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --text: #1e293b;
+      --sub: #64748b;
+      --border: #e2e8f0;
+      --accent: #6366f1;
+      --danger: #ef4444;
+      --success: #22c55e;
+      --radius: 12px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f172a;
+        --card: #1e293b;
+        --text: #f1f5f9;
+        --sub: #94a3b8;
+        --border: #334155;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 16px;
+      min-height: 100vh;
+    }
+    .container { max-width: 680px; margin: 0 auto; }
+    h1 { font-size: 2rem; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .subtitle { color: var(--sub); margin-bottom: 24px; font-size: 0.95rem; }
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+      border: 1px solid var(--border);
+    }
+    .card h2 { font-size: 1.2rem; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+    .profile-list { display: flex; flex-direction: column; gap: 12px; }
+    .profile-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px; background: var(--bg); border-radius: 8px;
+      border: 1px solid var(--border); flex-wrap: wrap; gap: 8px;
+    }
+    .profile-info { flex: 1; min-width: 150px; }
+    .profile-name { font-weight: 600; margin-bottom: 4px; }
+    .profile-meta { font-size: 0.8rem; color: var(--sub); word-break: break-all; }
+    .btn {
+      border: none; padding: 8px 14px; border-radius: 6px;
+      cursor: pointer; font-size: 0.9rem; font-weight: 500;
+      color: white; transition: opacity 0.2s;
+    }
+    .btn:active { opacity: 0.8; }
+    .btn-primary { background: var(--accent); }
+    .btn-danger { background: var(--danger); }
+    .btn-outline { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+    .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+    .form-group { margin-bottom: 12px; }
+    label { display: block; font-weight: 500; margin-bottom: 4px; font-size: 0.9rem; }
+    input, select {
+      width: 100%; padding: 10px; border: 1px solid var(--border);
+      border-radius: 6px; background: var(--bg); color: var(--text);
+      font-size: 0.9rem;
+    }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .current-badge {
+      background: var(--success); color: white; padding: 2px 8px;
+      border-radius: 10px; font-size: 0.75rem; margin-left: 8px;
+    }
+    .log-text {
+      white-space: pre-wrap; font-family: monospace; font-size: 0.8rem;
+      max-height: 300px; overflow-y: auto; background: var(--bg);
+      padding: 12px; border-radius: 8px;
+    }
+    .backup-item {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.85rem; padding: 6px 0; border-bottom: 1px solid var(--border);
+    }
+    .backup-item:last-child { border-bottom: none; }
+    .toast {
+      position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+      background: var(--text); color: var(--bg); padding: 12px 25px;
+      border-radius: 30px; font-size: 0.95rem; opacity: 0;
+      transition: opacity 0.3s; z-index: 2000; pointer-events: none;
+    }
+    .toast.show { opacity: 1; }
+    .empty-state { text-align: center; color: var(--sub); padding: 20px; }
+    .hint { font-size: 0.8rem; color: var(--sub); margin-top: 8px; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>⚡ Claude 套餐管理</h1>
+  <p class="subtitle">当前生效的套餐：<strong id="currentName" style="color:var(--accent)">加载中...</strong></p>
+
+  <!-- 当前环境 -->
+  <div class="card">
+    <h2>📍 当前环境变量</h2>
+    <div id="currentEnv" class="log-text" style="max-height:150px">加载中...</div>
+  </div>
+
+  <!-- 套餐列表 -->
+  <div class="card">
+    <h2>📦 已保存的套餐</h2>
+    <div id="profileList" class="profile-list">加载中...</div>
+  </div>
+
+  <!-- 添加/编辑套餐 -->
+  <div class="card">
+    <h2>➕ 添加 / 编辑套餐</h2>
+    <div class="form-group">
+      <label>厂商模板（可选）</label>
+      <select id="presetSelect" onchange="applyPreset()">
+        <option value="">-- 手动填写 --</option>
+      </select>
+    </div>
+    <div class="form-group"><label>套餐名称</label><input id="newName" placeholder="如 aliyun-pro"></div>
+    <div class="form-group"><label>API Key</label><input id="newToken" type="password" placeholder="sk-..."></div>
+    <div class="form-group"><label>Base URL</label><input id="newBaseUrl" placeholder="https://..."></div>
+    <div class="form-group"><label>Opus 模型</label><input id="newOpus" placeholder="复杂任务模型"></div>
+    <div class="form-group"><label>Sonnet 模型</label><input id="newSonnet" placeholder="日常主力模型"></div>
+    <div class="form-group"><label>Haiku 模型</label><input id="newHaiku" placeholder="轻量任务模型"></div>
+    <div class="row">
+      <button class="btn btn-primary" onclick="addOrUpdateProfile()">保存套餐</button>
+      <button class="btn btn-outline" onclick="clearForm()">清空表单</button>
+    </div>
+    <p class="hint">编辑已有套餐请先点击列表中的 ✏️ 按钮</p>
+  </div>
+
+  <!-- 备份与还原 -->
+  <div class="card">
+    <h2>⏪ 备份与还原</h2>
+    <div class="row" style="margin-bottom:12px">
+      <select id="backupType" style="flex:1">
+        <option value="settings">settings.json 备份</option>
+        <option value="profiles">profiles.json 备份</option>
+      </select>
+      <button class="btn btn-outline" onclick="loadBackups()">查看备份</button>
+    </div>
+    <div id="backupList" class="log-text" style="max-height:200px">点击「查看备份」加载</div>
+  </div>
+
+  <!-- 操作日志 -->
+  <div class="card">
+    <h2>📋 操作日志</h2>
+    <div class="row" style="margin-bottom:12px">
+      <input id="logDate" type="date" style="flex:1">
+      <button class="btn btn-outline" onclick="loadLogs()">查询日志</button>
+    </div>
+    <div id="logContent" class="log-text">选择日期后点击查询</div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '/api';
+let presets = {};
+let editingProfile = null;
+
+function showToast(msg, duration = 2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), duration);
+}
+
+async function fetchJSON(url, opt) {
+  const res = await fetch(url, opt);
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || '请求失败');
+  }
+  return res.json();
+}
+
+// 加载预设模板
+async function loadPresets() {
+  presets = await fetchJSON(`${API}/presets`);
+  const select = document.getElementById('presetSelect');
+  select.innerHTML = '<option value="">-- 手动填写 --</option>';
+  Object.entries(presets).forEach(([key, data]) => {
+    select.innerHTML += `<option value="${key}">${data.label}</option>`;
+  });
+}
+
+// 应用预设
+function applyPreset() {
+  const key = document.getElementById('presetSelect').value;
+  if (!key || !presets[key]) return;
+  const p = presets[key];
+  document.getElementById('newBaseUrl').value = p.baseUrl || '';
+  document.getElementById('newOpus').value = p.opus || '';
+  document.getElementById('newSonnet').value = p.sonnet || '';
+  document.getElementById('newHaiku').value = p.haiku || '';
+}
+
+// 加载当前环境
+async function loadCurrent() {
+  try {
+    const env = await fetchJSON(`${API}/current`);
+    const keys = Object.keys(env);
+    if (keys.length === 0) {
+      document.getElementById('currentEnv').textContent = '未配置环境变量';
+      document.getElementById('currentName').textContent = '无';
+      return '';
+    }
+    document.getElementById('currentEnv').innerHTML = keys
+      .map(k => `${k}: ${env[k]}`)
+      .join('\n');
+    const model = env.ANTHROPIC_DEFAULT_SONNET_MODEL || env.ANTHROPIC_MODEL || '';
+    document.getElementById('currentName').textContent = model || '未知';
+    return model;
+  } catch (e) {
+    document.getElementById('currentEnv').textContent = '加载失败: ' + e.message;
+    return '';
+  }
+}
+
+// 加载套餐列表
+async function loadProfiles() {
+  try {
+    const profiles = await fetchJSON(`${API}/profiles`);
+    const listDiv = document.getElementById('profileList');
+    const currentModel = await loadCurrent();
+    const names = Object.keys(profiles);
+
+    let currentName = '未知';
+    for (const [name, p] of Object.entries(profiles)) {
+      const env = p.env || {};
+      const model = env.ANTHROPIC_DEFAULT_SONNET_MODEL || env.ANTHROPIC_MODEL || '';
+      if (model && model === currentModel) {
+        currentName = name;
+        break;
+      }
+    }
+    document.getElementById('currentName').textContent = currentName + (currentModel ? ` (${currentModel})` : '');
+
+    if (names.length === 0) {
+      listDiv.innerHTML = '<div class="empty-state">暂无套餐，请在下方添加</div>';
+      return;
+    }
+    listDiv.innerHTML = names.map(name => {
+      const env = profiles[name].env || {};
+      const model = env.ANTHROPIC_DEFAULT_SONNET_MODEL || env.ANTHROPIC_MODEL || '无模型';
+      const baseUrl = env.ANTHROPIC_BASE_URL || '';
+      const isCurrent = (model === currentModel);
+      return `
+        <div class="profile-item">
+          <div class="profile-info">
+            <div class="profile-name">${name}${isCurrent ? '<span class="current-badge">当前</span>' : ''}</div>
+            <div class="profile-meta">模型：${model}<br>Base：${baseUrl || '默认'}</div>
+          </div>
+          <div class="row">
+            <button class="btn btn-primary btn-sm" onclick="switchTo('${name}')">切换</button>
+            <button class="btn btn-outline btn-sm" onclick="editProfile('${name}')">✏️</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteProfile('${name}')">删除</button>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    document.getElementById('profileList').innerHTML = '<div class="empty-state">加载失败: ' + e.message + '</div>';
+  }
+}
+
+async function switchTo(name) {
+  if (!confirm(`确定切换至套餐 "${name}" 吗？`)) return;
+  try {
+    await fetchJSON(`${API}/switch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    showToast(`已切换到「${name}」，请重启 Claude Code`);
+    loadCurrent();
+    loadProfiles();
+  } catch (e) {
+    showToast('切换失败: ' + e.message);
+  }
+}
+
+async function deleteProfile(name) {
+  if (!confirm(`确定删除套餐 "${name}" 吗？\n此操作有备份，可还原。`)) return;
+  try {
+    await fetchJSON(`${API}/profiles/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    showToast(`已删除「${name}」`);
+    loadProfiles();
+  } catch (e) {
+    showToast('删除失败: ' + e.message);
+  }
+}
+
+// 编辑：获取真实密钥并填入表单
+async function editProfile(name) {
+  try {
+    const profile = await fetchJSON(`${API}/profiles/${encodeURIComponent(name)}/plain`);
+    if (!profile) return showToast('套餐不存在');
+    editingProfile = name;
+    document.getElementById('newName').value = name;
+    document.getElementById('newName').disabled = true;
+    document.getElementById('newToken').value = profile.env.ANTHROPIC_AUTH_TOKEN || '';
+    document.getElementById('newBaseUrl').value = profile.env.ANTHROPIC_BASE_URL || '';
+    document.getElementById('newOpus').value = profile.env.ANTHROPIC_DEFAULT_OPUS_MODEL || '';
+    document.getElementById('newSonnet').value = profile.env.ANTHROPIC_DEFAULT_SONNET_MODEL || profile.env.ANTHROPIC_MODEL || '';
+    document.getElementById('newHaiku').value = profile.env.ANTHROPIC_DEFAULT_HAIKU_MODEL || '';
+    document.getElementById('presetSelect').value = '';
+    window.scrollTo({ top: document.querySelectorAll('.card')[2].offsetTop - 20, behavior: 'smooth' });
+  } catch (e) {
+    showToast('加载失败: ' + e.message);
+  }
+}
+
+function clearForm() {
+  editingProfile = null;
+  document.getElementById('newName').disabled = false;
+  ['newName', 'newToken', 'newBaseUrl', 'newOpus', 'newSonnet', 'newHaiku'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('presetSelect').value = '';
+}
+
+async function addOrUpdateProfile() {
+  const name = editingProfile || document.getElementById('newName').value.trim();
+  const token = document.getElementById('newToken').value.trim();
+  const baseUrl = document.getElementById('newBaseUrl').value.trim();
+  const opus = document.getElementById('newOpus').value.trim();
+  const sonnet = document.getElementById('newSonnet').value.trim();
+  const haiku = document.getElementById('newHaiku').value.trim();
+
+  if (!name) return showToast('请填写套餐名称');
+  if (!token && !editingProfile) return showToast('请填写 API Key');
+
+  const env = {};
+  if (token) env.ANTHROPIC_AUTH_TOKEN = token;
+  if (baseUrl) env.ANTHROPIC_BASE_URL = baseUrl;
+  if (opus) env.ANTHROPIC_DEFAULT_OPUS_MODEL = opus;
+  if (sonnet) env.ANTHROPIC_DEFAULT_SONNET_MODEL = sonnet;
+  if (haiku) env.ANTHROPIC_DEFAULT_HAIKU_MODEL = haiku;
+
+  try {
+    await fetchJSON(`${API}/profiles`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, env })
+    });
+    showToast(editingProfile ? `套餐「${name}」已更新` : `套餐「${name}」已添加`);
+    clearForm();
+    loadProfiles();
+    loadCurrent();
+  } catch (e) {
+    showToast('保存失败: ' + e.message);
+  }
+}
+
+async function loadBackups() {
+  const type = document.getElementById('backupType').value;
+  try {
+    const list = await fetchJSON(`${API}/backups/${type}`);
+    const div = document.getElementById('backupList');
+    if (list.length === 0) {
+      div.textContent = '暂无备份';
+      return;
+    }
+    div.innerHTML = list.map(f => `
+      <div class="backup-item">
+        <span>${f}</span>
+        <button class="btn btn-sm btn-outline" onclick="restoreBackup('${type}', '${f}')">还原</button>
+      </div>
+    `).join('');
+  } catch (e) {
+    showToast('加载备份失败: ' + e.message);
+  }
+}
+
+async function restoreBackup(type, fileName) {
+  if (!confirm(`确定还原 ${type} 到 ${fileName}？\n当前配置会被自动备份。`)) return;
+  try {
+    await fetchJSON(`${API}/restore`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, backupFileName: fileName })
+    });
+    showToast('还原成功，请重启 Claude Code');
+    loadCurrent();
+    loadProfiles();
+  } catch (e) {
+    showToast('还原失败: ' + e.message);
+  }
+}
+
+async function loadLogs() {
+  const date = document.getElementById('logDate').value;
+  try {
+    const logs = await fetchJSON(`${API}/logs${date ? '?date=' + date : ''}`);
+    const div = document.getElementById('logContent');
+    if (logs.length === 0) {
+      div.textContent = '暂无日志';
+      return;
+    }
+    div.innerHTML = logs.map(l => `📅 ${l.date}\n${l.content}`).join('\n\n');
+  } catch (e) {
+    showToast('加载日志失败: ' + e.message);
+  }
+}
+
+// 初始化
+loadPresets();
+loadProfiles();
+</script>
+</body>
+</html>
