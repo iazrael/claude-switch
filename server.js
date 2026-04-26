@@ -123,6 +123,10 @@ app.get('/api/logs', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`管理端已启动 → http://localhost:${PORT}`);
-});
+module.exports = app;
+
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`管理端已启动 → http://localhost:${PORT}`);
+  });
+}
