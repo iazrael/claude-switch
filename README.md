@@ -47,7 +47,56 @@ cd claude-switch
 npm install
 ```
 
+注册为全局命令（可选，推荐）：
+
+```bash
+npm link
+```
+
+执行后 `claude-switch` 命令可在任意目录直接使用。不再需要时执行 `npm unlink -g claude-switch` 即可移除。
+
 ## 使用
+
+### CLI 模式
+
+安装时执行了 `npm link` 后，可在任意终端直接使用：
+
+```bash
+# 无参数直接运行 → 进入交互式切换菜单
+claude-switch
+
+# 查看当前 settings.json 中的环境变量
+claude-switch current
+
+# 列出所有已保存的套餐
+claude-switch list
+# 或简写
+claude-switch ls
+
+# 交互式添加套餐（会逐项询问 API Key、Base URL、模型等）
+claude-switch add
+# 也可以直接指定名称
+claude-switch add aliyun-pro
+
+# 交互式切换套餐（方向键选择）
+claude-switch switch
+# 直接切换到指定套餐
+claude-switch switch aliyun-pro
+
+# 删除套餐
+claude-switch remove aliyun-pro
+# 或简写
+claude-switch rm aliyun-pro
+
+# 查看帮助
+claude-switch --help
+```
+
+> **提示**：如果觉得 `claude-switch` 太长，可以在 `~/.zshrc` 或 `~/.bashrc` 中加个别名：
+> ```bash
+> alias cs='claude-switch'
+> ```
+> 之后输入 `cs` 就能直接调出切换菜单。
 
 ### Web 模式（推荐）
 
@@ -63,22 +112,6 @@ node server.js
 npm install -g pm2
 pm2 start server.js --name claude-switch
 pm2 save
-```
-
-### CLI 模式
-
-```bash
-# 查看当前环境
-node index.js current
-
-# 列出所有套餐
-node index.js list
-
-# 交互式添加套餐
-node index.js add
-
-# 交互式切换
-node index.js switch
 ```
 
 ## 数据存储
