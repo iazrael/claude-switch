@@ -147,7 +147,14 @@ program
 
 // 无参数时默认进入切换
 if (process.argv.length === 2) {
-  switchProfileUI();
+  (async () => {
+    try {
+      await switchProfileUI();
+    } catch (err) {
+      console.error(chalk.red('操作失败: ' + err.message));
+      process.exit(1);
+    }
+  })();
 } else {
   program.parse(process.argv);
 }

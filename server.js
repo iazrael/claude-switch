@@ -8,7 +8,7 @@ const app = express();
 const PORT = 3333;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // 套餐列表（脱敏）
@@ -28,23 +28,24 @@ app.get('/api/profiles', async (req, res) => {
   }
 });
 
-// 单个套餐解密信息（编辑用）
-app.get('/api/profiles/:name/plain', async (req, res) => {
-  try {
-    const profile = await manager.getPlainProfile(req.params.name);
-    if (!profile) return res.status(404).json({ error: '套餐不存在' });
-    res.json(profile);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// 新增/更新套餐
+// 新增套餐
 app.post('/api/profiles', async (req, res) => {
   try {
     const { name, env } = req.body;
     if (!name || !env) throw new Error('缺少参数');
     await manager.addProfile(name, env);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// 更新套餐（合并：非空字段覆盖，空字段保留原值）
+app.put('/api/profiles/:name', async (req, res) => {
+  try {
+    const { env } = req.body;
+    if (!env) throw new Error('缺少参数');
+    await manager.updateProfile(req.params.name, env);
     res.json({ success: true });
   } catch (e) {
     res.status(400).json({ error: e.message });

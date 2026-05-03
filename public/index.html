@@ -188,9 +188,17 @@ async function fetchJSON(url, opt) {
 async function loadPresets() {
   presets = await fetchJSON(`${API}/presets`);
   const select = document.getElementById('presetSelect');
-  select.innerHTML = '<option value="">-- 手动填写 --</option>';
+  // 清空并重建选项
+  while (select.firstChild) select.removeChild(select.firstChild);
+  const defaultOpt = document.createElement('option');
+  defaultOpt.value = '';
+  defaultOpt.textContent = '-- 手动填写 --';
+  select.appendChild(defaultOpt);
   Object.entries(presets).forEach(([key, data]) => {
-    select.innerHTML += `<option value="${key}">${data.label}</option>`;
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = data.label;
+    select.appendChild(opt);
   });
 }
 
@@ -215,9 +223,8 @@ async function loadCurrent() {
       document.getElementById('currentName').textContent = '无';
       return '';
     }
-    document.getElementById('currentEnv').innerHTML = keys
-      .map(k => `${k}: ${env[k]}`)
-      .join('\n');
+    const lines = keys.map(k => k + ': ' + env[k]).join('\n');
+    document.getElementById('currentEnv').textContent = lines;
     const model = env.ANTHROPIC_DEFAULT_SONNET_MODEL || env.ANTHROPIC_MODEL || '';
     document.getElementById('currentName').textContent = model || '未知';
     return model;
@@ -244,44 +251,98 @@ async function loadProfiles() {
         break;
       }
     }
-    document.getElementById('currentName').textContent = currentName + (currentModel ? ` (${currentModel})` : '');
+    document.getElementById('currentName').textContent = currentName + (currentModel ? ' (' + currentModel + ')' : '');
+
+    // 清空列表
+    while (listDiv.firstChild) listDiv.removeChild(listDiv.firstChild);
 
     if (names.length === 0) {
-      listDiv.innerHTML = '<div class="empty-state">暂无套餐，请在下方添加</div>';
+      const emptyDiv = document.createElement('div');
+      emptyDiv.className = 'empty-state';
+      emptyDiv.textContent = '暂无套餐，请在下方添加';
+      listDiv.appendChild(emptyDiv);
       return;
     }
-    listDiv.innerHTML = names.map(name => {
+
+    names.forEach(name => {
       const env = profiles[name].env || {};
       const model = env.ANTHROPIC_DEFAULT_SONNET_MODEL || env.ANTHROPIC_MODEL || '无模型';
       const baseUrl = env.ANTHROPIC_BASE_URL || '';
       const isCurrent = (model === currentModel);
-      return `
-        <div class="profile-item">
-          <div class="profile-info">
-            <div class="profile-name">${name}${isCurrent ? '<span class="current-badge">当前</span>' : ''}</div>
-            <div class="profile-meta">模型：${model}<br>Base：${baseUrl || '默认'}</div>
-          </div>
-          <div class="row">
-            <button class="btn btn-primary btn-sm" onclick="switchTo('${name}')">切换</button>
-            <button class="btn btn-outline btn-sm" onclick="editProfile('${name}')">✏️</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteProfile('${name}')">删除</button>
-          </div>
-        </div>`;
-    }).join('');
+
+      const item = document.createElement('div');
+      item.className = 'profile-item';
+
+      const infoDiv = document.createElement('div');
+      infoDiv.className = 'profile-info';
+
+      const nameDiv = document.createElement('div');
+      nameDiv.className = 'profile-name';
+      nameDiv.textContent = name;
+      if (isCurrent) {
+        const badge = document.createElement('span');
+        badge.className = 'current-badge';
+        badge.textContent = '当前';
+        nameDiv.appendChild(badge);
+      }
+
+      const metaDiv = document.createElement('div');
+      metaDiv.className = 'profile-meta';
+      metaDiv.textContent = '模型：' + model + '\nBase：' + (baseUrl || '默认');
+      // 用 <br> 替换换行
+      metaDiv.innerHTML = '';
+      metaDiv.appendChild(document.createTextNode('模型：' + model));
+      metaDiv.appendChild(document.createElement('br'));
+      metaDiv.appendChild(document.createTextNode('Base：' + (baseUrl || '默认')));
+
+      infoDiv.appendChild(nameDiv);
+      infoDiv.appendChild(metaDiv);
+
+      const btnRow = document.createElement('div');
+      btnRow.className = 'row';
+
+      const switchBtn = document.createElement('button');
+      switchBtn.className = 'btn btn-primary btn-sm';
+      switchBtn.textContent = '切换';
+      switchBtn.onclick = () => switchTo(name);
+
+      const editBtn = document.createElement('button');
+      editBtn.className = 'btn btn-outline btn-sm';
+      editBtn.textContent = '✏️';
+      editBtn.onclick = () => editProfile(name);
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn btn-danger btn-sm';
+      delBtn.textContent = '删除';
+      delBtn.onclick = () => deleteProfile(name);
+
+      btnRow.appendChild(switchBtn);
+      btnRow.appendChild(editBtn);
+      btnRow.appendChild(delBtn);
+
+      item.appendChild(infoDiv);
+      item.appendChild(btnRow);
+      listDiv.appendChild(item);
+    });
   } catch (e) {
-    document.getElementById('profileList').innerHTML = '<div class="empty-state">加载失败: ' + e.message + '</div>';
+    const listDiv = document.getElementById('profileList');
+    while (listDiv.firstChild) listDiv.removeChild(listDiv.firstChild);
+    const errDiv = document.createElement('div');
+    errDiv.className = 'empty-state';
+    errDiv.textContent = '加载失败: ' + e.message;
+    listDiv.appendChild(errDiv);
   }
 }
 
 async function switchTo(name) {
-  if (!confirm(`确定切换至套餐 "${name}" 吗？`)) return;
+  if (!confirm('确定切换至套餐 "' + name + '" 吗？')) return;
   try {
     await fetchJSON(`${API}/switch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name })
     });
-    showToast(`已切换到「${name}」，请重启 Claude Code`);
+    showToast('已切换到「' + name + '」，请重启 Claude Code');
     loadCurrent();
     loadProfiles();
   } catch (e) {
@@ -290,25 +351,27 @@ async function switchTo(name) {
 }
 
 async function deleteProfile(name) {
-  if (!confirm(`确定删除套餐 "${name}" 吗？\n此操作有备份，可还原。`)) return;
+  if (!confirm('确定删除套餐 "' + name + '" 吗？\n此操作有备份，可还原。')) return;
   try {
     await fetchJSON(`${API}/profiles/${encodeURIComponent(name)}`, { method: 'DELETE' });
-    showToast(`已删除「${name}」`);
+    showToast('已删除「' + name + '」');
     loadProfiles();
   } catch (e) {
     showToast('删除失败: ' + e.message);
   }
 }
 
-// 编辑：获取真实密钥并填入表单
+// 编辑：从列表数据中填充表单，API Key 显示占位符
 async function editProfile(name) {
   try {
-    const profile = await fetchJSON(`${API}/profiles/${encodeURIComponent(name)}/plain`);
+    const profiles = await fetchJSON(`${API}/profiles`);
+    const profile = profiles[name];
     if (!profile) return showToast('套餐不存在');
     editingProfile = name;
     document.getElementById('newName').value = name;
     document.getElementById('newName').disabled = true;
-    document.getElementById('newToken').value = profile.env.ANTHROPIC_AUTH_TOKEN || '';
+    document.getElementById('newToken').value = '';
+    document.getElementById('newToken').placeholder = '保持不变（留空不修改）';
     document.getElementById('newBaseUrl').value = profile.env.ANTHROPIC_BASE_URL || '';
     document.getElementById('newOpus').value = profile.env.ANTHROPIC_DEFAULT_OPUS_MODEL || '';
     document.getElementById('newSonnet').value = profile.env.ANTHROPIC_DEFAULT_SONNET_MODEL || profile.env.ANTHROPIC_MODEL || '';
@@ -326,6 +389,7 @@ function clearForm() {
   ['newName', 'newToken', 'newBaseUrl', 'newOpus', 'newSonnet', 'newHaiku'].forEach(id => {
     document.getElementById(id).value = '';
   });
+  document.getElementById('newToken').placeholder = 'sk-...';
   document.getElementById('presetSelect').value = '';
 }
 
@@ -338,7 +402,6 @@ async function addOrUpdateProfile() {
   const haiku = document.getElementById('newHaiku').value.trim();
 
   if (!name) return showToast('请填写套餐名称');
-  if (!token && !editingProfile) return showToast('请填写 API Key');
 
   const env = {};
   if (token) env.ANTHROPIC_AUTH_TOKEN = token;
@@ -348,12 +411,25 @@ async function addOrUpdateProfile() {
   if (haiku) env.ANTHROPIC_DEFAULT_HAIKU_MODEL = haiku;
 
   try {
-    await fetchJSON(`${API}/profiles`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, env })
-    });
-    showToast(editingProfile ? `套餐「${name}」已更新` : `套餐「${name}」已添加`);
+    if (editingProfile) {
+      // 编辑模式：用 PUT 合并更新
+      if (!token && Object.keys(env).length === 0) return showToast('请至少填写一项');
+      await fetchJSON(`${API}/profiles/${encodeURIComponent(editingProfile)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ env })
+      });
+      showToast('套餐「' + name + '」已更新');
+    } else {
+      // 新增模式
+      if (!token) return showToast('请填写 API Key');
+      await fetchJSON(`${API}/profiles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, env })
+      });
+      showToast('套餐「' + name + '」已添加');
+    }
     clearForm();
     loadProfiles();
     loadCurrent();
@@ -367,23 +443,32 @@ async function loadBackups() {
   try {
     const list = await fetchJSON(`${API}/backups/${type}`);
     const div = document.getElementById('backupList');
+    // 清空
+    while (div.firstChild) div.removeChild(div.firstChild);
     if (list.length === 0) {
       div.textContent = '暂无备份';
       return;
     }
-    div.innerHTML = list.map(f => `
-      <div class="backup-item">
-        <span>${f}</span>
-        <button class="btn btn-sm btn-outline" onclick="restoreBackup('${type}', '${f}')">还原</button>
-      </div>
-    `).join('');
+    list.forEach(f => {
+      const item = document.createElement('div');
+      item.className = 'backup-item';
+      const span = document.createElement('span');
+      span.textContent = f;
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-sm btn-outline';
+      btn.textContent = '还原';
+      btn.onclick = () => restoreBackup(type, f);
+      item.appendChild(span);
+      item.appendChild(btn);
+      div.appendChild(item);
+    });
   } catch (e) {
     showToast('加载备份失败: ' + e.message);
   }
 }
 
 async function restoreBackup(type, fileName) {
-  if (!confirm(`确定还原 ${type} 到 ${fileName}？\n当前配置会被自动备份。`)) return;
+  if (!confirm('确定还原 ' + type + ' 到 ' + fileName + '？\n当前配置会被自动备份。')) return;
   try {
     await fetchJSON(`${API}/restore`, {
       method: 'POST',
@@ -407,7 +492,7 @@ async function loadLogs() {
       div.textContent = '暂无日志';
       return;
     }
-    div.innerHTML = logs.map(l => `📅 ${l.date}\n${l.content}`).join('\n\n');
+    div.textContent = logs.map(l => '📅 ' + l.date + '\n' + l.content).join('\n\n');
   } catch (e) {
     showToast('加载日志失败: ' + e.message);
   }
