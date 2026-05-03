@@ -1,6 +1,6 @@
 # Claude Switch - 产品规格说明书
 
-> 版本：2.0.0 | 最后更新：2026-04-26
+> 版本：2.1.0 | 最后更新：2026-05-03
 
 ---
 
@@ -79,9 +79,10 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 - 支持手动填写所有字段
 
 #### F2: 编辑套餐
-- 点击列表中的编辑按钮，加载该套餐的完整解密信息到表单
-- API Key 在列表中脱敏显示（`••••••••`），编辑时展示真实值
-- 修改后保存即覆盖原有配置
+- 点击列表中的编辑按钮，加载该套餐的信息到表单
+- API Key 在列表中脱敏显示（`••••••••`），编辑时显示占位符「保持不变」
+- 用户输入新 Key 值则覆盖，留空保留原值
+- 采用合并更新策略：前端提交的非空字段覆盖原值，空字段保留原值
 
 #### F3: 删除套餐
 - 删除前弹出确认提示
@@ -97,8 +98,8 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 
 #### F5: API Key 加密存储
 - 使用 AES-256-CBC 算法加密
-- 密钥由本机特征派生（hostname + username + platform + arch）
-- 加密密钥与机器绑定，更换机器后需重新输入
+- 密钥由增强机器特征派生（machineId + hostname + username + platform + arch + totalmem + cpu_model + salt）
+- 加密密钥与机器硬件深度绑定，更换机器后需重新输入
 - 加密格式：`IV:ciphertext`（Base64 编码）
 - 首次启动自动迁移明文旧数据为加密存储
 
@@ -107,7 +108,7 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 
 #### F7: Web 端脱敏
 - 套餐列表 API 返回的 Token 统一替换为 `••••••••`
-- 仅在编辑场景通过专用接口返回真实密钥
+- Web 端不提供获取明文 API Key 的接口，编辑时 Key 以占位符显示
 
 ### 3.3 备份与还原
 
@@ -180,7 +181,7 @@ claude-switch/
 ├── public/
 │   └── index.html          # Web 管理页面（单文件 SPA，420行）
 ├── tests/
-│   └── index.test.js       # Vitest 测试用例（30个）
+│   └── index.test.js       # Vitest 测试用例（33个）
 ├── docs/
 │   └── SPEC.md             # 本文档
 ├── index.js                # CLI 入口（Commander.js）
@@ -222,7 +223,7 @@ Claude Code 配置文件：`~/.claude/settings.json`
 | 方法 | 路径 | 说明 | 请求体 | 返回 |
 |---|---|---|---|---|
 | GET | `/api/profiles` | 套餐列表（Token 脱敏） | — | `{ name: { env: {...} } }` |
-| GET | `/api/profiles/:name/plain` | 单个套餐解密信息 | — | `{ name, env: {...} }` |
+| PUT | `/api/profiles/:name` | 编辑套餐（合并更新） | `{ env }` | `{ success: true }` |
 | POST | `/api/profiles` | 新增/更新套餐 | `{ name, env }` | `{ success: true }` |
 | DELETE | `/api/profiles/:name` | 删除套餐 | — | `{ success: true }` |
 | POST | `/api/switch` | 切换套餐 | `{ name }` | `{ success: true }` |
@@ -236,8 +237,9 @@ Claude Code 配置文件：`~/.claude/settings.json`
 
 ```
 密钥派生:
-  machineId = hostname + username + platform + arch
-  key = SHA-256(machineId) → 取前 32 字节
+  machineId = UUID(machine-id) 或 fallback
+  seed = machineId + hostname + username + platform + arch + totalmem + cpu_model + salt
+  key = SHA-256(seed) → 取前 32 字节
 
 加密流程:
   IV = crypto.randomBytes(16)
@@ -257,14 +259,14 @@ Claude Code 配置文件：`~/.claude/settings.json`
 
 ### 5.1 测试覆盖率
 
-共 30 个测试用例，分为 4 个测试套件：
+共 33 个测试用例，分为 4 个测试套件：
 
 | 套件 | 用例数 | 覆盖范围 |
 |---|---|---|
 | Profile Manager | 13 | CRUD、加密验证、备份、错误处理 |
 | Crypto Utils | 3 | 加解密往返、向后兼容、随机 IV |
 | Preset Templates | 2 | 模板完整性、字段校验 |
-| API Endpoints | 12 | 全部 REST 接口、脱敏、完整工作流 |
+| API Endpoints | 15 | 全部 REST 接口、脱敏、合并更新、安全防护、完整工作流 |
 
 ### 5.2 测试隔离策略
 
@@ -310,6 +312,7 @@ node index.js switch
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `CLAUDE_SWITCH_DIR` | `~/.claude-switch` | 数据存储目录（仅影响 profiles/backups/logs） |
+| `CLAUDE_SETTINGS_PATH` | `~/.claude/settings.json` | Claude Code 配置文件路径 |
 | `PORT` | 3333 | Web 服务器端口（需修改代码） |
 
 ---
@@ -319,17 +322,24 @@ node index.js switch
 1. **机器绑定**：加密密钥基于机器特征，更换机器后需重新输入 API Key
 2. **无鉴权**：Web 管理端无登录机制，依赖局域网隔离，不建议公网暴露
 3. **单实例**：不支持多用户并发，同一时间只能有一个用户操作
-4. **settings.json 锁定**：切换套餐会完整覆盖 `settings.json` 中的 `env` 字段，用户自定义的 env 变量需在套餐中预设
-5. **Windows 兼容性**：未在 Windows 上测试，path 处理可能存在问题
+4. **settings.json 合并**：切换套餐采用合并策略写入 `settings.json` 中的 `env` 字段，仅更新套餐定义的变量，不影响其他 env 变量
+5. **备份上限**：自动备份保留最近 20 份，超出自动清理最旧的
+6. **日志保留**：操作日志保留 30 天，超出自动清理
+7. **Windows 兼容性**：未在 Windows 上测试，path 处理可能存在问题
 
 ---
 
 ## 8. 路线图
 
 ### v2.1（计划）
-- [ ] Web 端基本鉴权（密码保护）
 - [ ] 导入/导出套餐配置（JSON 文件）
 - [ ] 支持自定义环境变量（超出默认 5 个字段）
+- [x] 密钥派生增强（machineId + 硬件特征 + salt）
+- [x] API Key 编辑方式改为占位符模式
+- [x] 移除明文 API Key 接口
+- [x] 前端 XSS 修复（innerHTML → textContent）
+- [x] 备份自动清理（20 份上限）
+- [x] 日志自动清理（30 天保留）
 
 ### v3.0（远期）
 - [ ] 多语言支持
