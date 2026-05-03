@@ -1,6 +1,6 @@
 # Claude Switch - 产品规格说明书
 
-> 版本：2.1.0 | 最后更新：2026-05-03
+> 版本：2.2.0 | 最后更新：2026-05-03
 
 ---
 
@@ -143,6 +143,19 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 - `node index.js add` — 交互式添加套餐
 - `node index.js switch` — 交互式切换套餐
 
+#### F13: 备份原因标注
+- 备份文件名格式改为 `{type}-{timestamp}_{reason}.json`（下划线分隔 reason）
+- reason 取值：`switch-{profileName}` / `add-{name}` / `remove-{name}` / `update-{name}` / `restore` / `migration`
+- 备份列表 API 返回解析后的 reason 信息，前端展示
+- 示例：`profiles-2026-05-03T13-22-00_switch-aliyun-pro.json`
+
+#### F14: 还原前 Diff 预览
+- 新增独立工具模块 `lib/diff.js`（JSON diff 工具）
+- diff 工具功能：输入两个 JSON 对象，输出 `{ added: [...], removed: [...], changed: [...{key, oldValue, newValue}], unchanged: [...] }`
+- 敏感字段（包含 TOKEN 的 key）的值统一脱敏为 `••••••••`
+- API: `GET /api/backups/:type/:fileName/preview` 返回 diff 结果
+- 前端：备份列表加「预览」按钮，弹窗展示 diff，高亮差异，底部「确认还原」
+
 ---
 
 ## 4. 技术规格
@@ -177,6 +190,7 @@ claude-switch/
 │   ├── crypto-utils.js     # AES-256-CBC 加解密
 │   ├── profile-manager.js  # 核心业务逻辑（CRUD、切换、预设模板）
 │   ├── backup.js           # 备份还原管理
+│   ├── diff.js             # JSON diff 工具
 │   └── logger.js           # 操作日志
 ├── public/
 │   └── index.html          # Web 管理页面（单文件 SPA，420行）
@@ -229,7 +243,8 @@ Claude Code 配置文件：`~/.claude/settings.json`
 | POST | `/api/switch` | 切换套餐 | `{ name }` | `{ success: true }` |
 | GET | `/api/current` | 当前环境（Token 脱敏） | — | `{ key: value }` |
 | GET | `/api/presets` | 预设模板列表 | — | `{ key: { label, baseUrl, ... } }` |
-| GET | `/api/backups/:type` | 备份列表 | — | `[filename, ...]` |
+| GET | `/api/backups/:type` | 备份列表 | — | `[{fileName, reason, timestamp}, ...]` |
+| GET | `/api/backups/:type/:fileName/preview` | 备份 diff 预览 | — | diff 结果 |
 | POST | `/api/restore` | 还原备份 | `{ type, backupFileName }` | `{ success: true }` |
 | GET | `/api/logs?date=` | 操作日志 | — | `[{ date, content }]` |
 
@@ -259,14 +274,15 @@ Claude Code 配置文件：`~/.claude/settings.json`
 
 ### 5.1 测试覆盖率
 
-共 33 个测试用例，分为 4 个测试套件：
+共 38+ 个测试用例，分为 5 个测试套件：
 
 | 套件 | 用例数 | 覆盖范围 |
 |---|---|---|
 | Profile Manager | 13 | CRUD、加密验证、备份、错误处理 |
-| Crypto Utils | 3 | 加解密往返、向后兼容、随机 IV |
+| Crypto Utils | 5 | 加解密往返、向后兼容、随机 IV、重加密检测 |
+| Diff Utils | 7 | 空对象、相同对象、新增/删除/变更 key、敏感字段脱敏、嵌套对象 |
 | Preset Templates | 2 | 模板完整性、字段校验 |
-| API Endpoints | 15 | 全部 REST 接口、脱敏、合并更新、安全防护、完整工作流 |
+| API Endpoints | 15+ | 全部 REST 接口、脱敏、合并更新、安全防护、完整工作流、备份预览 |
 
 ### 5.2 测试隔离策略
 

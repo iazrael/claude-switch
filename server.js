@@ -102,6 +102,17 @@ app.get('/api/backups/:type', async (req, res) => {
   }
 });
 
+// 备份 diff 预览
+app.get('/api/backups/:type/:fileName/preview', async (req, res) => {
+  try {
+    const { type, fileName } = req.params;
+    const diff = await manager.getBackupPreview(type, fileName);
+    res.json(diff);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 // 还原
 app.post('/api/restore', async (req, res) => {
   try {

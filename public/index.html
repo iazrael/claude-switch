@@ -85,6 +85,27 @@
       font-size: 0.85rem; padding: 6px 0; border-bottom: 1px solid var(--border);
     }
     .backup-item:last-child { border-bottom: none; }
+    .backup-reason {
+      font-size: 0.75rem; color: var(--accent); margin-left: 6px;
+      padding: 1px 6px; border-radius: 4px; background: rgba(99,102,241,0.1);
+    }
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5); z-index: 3000;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .modal {
+      background: var(--card); border-radius: var(--radius); padding: 20px;
+      max-width: 700px; width: 90%; max-height: 80vh; overflow-y: auto;
+      border: 1px solid var(--border);
+    }
+    .modal h3 { margin-bottom: 12px; }
+    .diff-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; font-family: monospace; }
+    .diff-table th { text-align: left; padding: 6px 8px; border-bottom: 2px solid var(--border); color: var(--sub); }
+    .diff-table td { padding: 4px 8px; border-bottom: 1px solid var(--border); word-break: break-all; }
+    .diff-added { background: rgba(34,197,94,0.1); }
+    .diff-removed { background: rgba(239,68,68,0.1); }
+    .diff-changed { background: rgba(234,179,8,0.1); }
     .toast {
       position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
       background: var(--text); color: var(--bg); padding: 12px 25px;
@@ -449,18 +470,38 @@ async function loadBackups() {
       div.textContent = '暂无备份';
       return;
     }
-    list.forEach(f => {
-      const item = document.createElement('div');
-      item.className = 'backup-item';
-      const span = document.createElement('span');
-      span.textContent = f;
-      const btn = document.createElement('button');
-      btn.className = 'btn btn-sm btn-outline';
-      btn.textContent = '还原';
-      btn.onclick = () => restoreBackup(type, f);
-      item.appendChild(span);
-      item.appendChild(btn);
-      div.appendChild(item);
+    list.forEach(item => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'backup-item';
+      const leftDiv = document.createElement('div');
+      leftDiv.style.display = 'flex';
+      leftDiv.style.alignItems = 'center';
+      leftDiv.style.gap = '4px';
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = item.fileName;
+      leftDiv.appendChild(nameSpan);
+      if (item.reason) {
+        const reasonTag = document.createElement('span');
+        reasonTag.className = 'backup-reason';
+        reasonTag.textContent = item.reason;
+        leftDiv.appendChild(reasonTag);
+      }
+      const btnDiv = document.createElement('div');
+      btnDiv.style.display = 'flex';
+      btnDiv.style.gap = '4px';
+      const previewBtn = document.createElement('button');
+      previewBtn.className = 'btn btn-sm btn-outline';
+      previewBtn.textContent = '预览';
+      previewBtn.onclick = () => showDiffPreview(type, item.fileName);
+      const restoreBtn = document.createElement('button');
+      restoreBtn.className = 'btn btn-sm btn-outline';
+      restoreBtn.textContent = '还原';
+      restoreBtn.onclick = () => restoreBackup(type, item.fileName);
+      btnDiv.appendChild(previewBtn);
+      btnDiv.appendChild(restoreBtn);
+      wrapper.appendChild(leftDiv);
+      wrapper.appendChild(btnDiv);
+      div.appendChild(wrapper);
     });
   } catch (e) {
     showToast('加载备份失败: ' + e.message);
@@ -496,6 +537,123 @@ async function loadLogs() {
   } catch (e) {
     showToast('加载日志失败: ' + e.message);
   }
+}
+
+function closeDiffModal() {
+  const overlay = document.getElementById('diffModalOverlay');
+  if (overlay) overlay.remove();
+}
+
+async function showDiffPreview(type, fileName) {
+  try {
+    const diff = await fetchJSON(`${API}/backups/${type}/${encodeURIComponent(fileName)}/preview`);
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'diffModalOverlay';
+    overlay.onclick = (e) => { if (e.target === overlay) closeDiffModal(); };
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    const title = document.createElement('h3');
+    title.textContent = 'Diff 预览: ' + fileName;
+    modal.appendChild(title);
+    if (diff.profiles !== undefined) {
+      // profiles diff
+      const info = document.createElement('div');
+      info.style.marginBottom = '12px';
+      info.style.fontSize = '0.85rem';
+      info.style.color = 'var(--sub)';
+      const parts = [];
+      if (diff.added.length) parts.push('新增: ' + diff.added.join(', '));
+      if (diff.removed.length) parts.push('删除: ' + diff.removed.join(', '));
+      if (diff.changed.length) parts.push('变更: ' + diff.changed.map(c => c.profile).join(', '));
+      if (diff.unchanged.length) parts.push('未变: ' + diff.unchanged.join(', '));
+      info.textContent = parts.join(' | ') || '无差异';
+      modal.appendChild(info);
+      // render each changed profile
+      if (diff.changed.length > 0) {
+        diff.changed.forEach(ch => {
+          const sub = document.createElement('div');
+          sub.style.marginBottom = '10px';
+          const subTitle = document.createElement('div');
+          subTitle.style.fontWeight = '600';
+          subTitle.style.marginBottom = '4px';
+          subTitle.textContent = '套餐: ' + ch.profile;
+          sub.appendChild(subTitle);
+          const table = buildDiffTable(ch.changes);
+          sub.appendChild(table);
+          modal.appendChild(sub);
+        });
+      }
+    } else {
+      // settings diff (flat env)
+      const table = buildDiffTable(diff.changed || []);
+      const infoDiv = document.createElement('div');
+      infoDiv.style.marginBottom = '8px';
+      infoDiv.style.fontSize = '0.85rem';
+      infoDiv.style.color = 'var(--sub)';
+      const parts = [];
+      if (diff.added && diff.added.length) parts.push('新增: ' + diff.added.join(', '));
+      if (diff.removed && diff.removed.length) parts.push('删除: ' + diff.removed.join(', '));
+      if (diff.changed && diff.changed.length) parts.push('变更: ' + diff.changed.length + ' 项');
+      if (diff.unchanged && diff.unchanged.length) parts.push('未变: ' + diff.unchanged.length + ' 项');
+      infoDiv.textContent = parts.join(' | ') || '无差异';
+      modal.appendChild(infoDiv);
+      modal.appendChild(table);
+    }
+    const btnRow = document.createElement('div');
+    btnRow.className = 'row';
+    btnRow.style.justifyContent = 'flex-end';
+    btnRow.style.marginTop = '16px';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn btn-outline';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = closeDiffModal;
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'btn btn-danger';
+    confirmBtn.textContent = '确认还原';
+    confirmBtn.onclick = () => {
+      closeDiffModal();
+      restoreBackup(type, fileName);
+    };
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(confirmBtn);
+    modal.appendChild(btnRow);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+  } catch (e) {
+    showToast('加载预览失败: ' + e.message);
+  }
+}
+
+function buildDiffTable(changes) {
+  const table = document.createElement('table');
+  table.className = 'diff-table';
+  const thead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  ['Key', '当前值', '备份值'].forEach(text => {
+    const th = document.createElement('th');
+    th.textContent = text;
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  (changes || []).forEach(ch => {
+    const tr = document.createElement('tr');
+    tr.className = 'diff-changed';
+    const keyTd = document.createElement('td');
+    keyTd.textContent = ch.key;
+    const oldTd = document.createElement('td');
+    oldTd.textContent = typeof ch.oldValue === 'object' ? JSON.stringify(ch.oldValue) : String(ch.oldValue ?? '');
+    const newTd = document.createElement('td');
+    newTd.textContent = typeof ch.newValue === 'object' ? JSON.stringify(ch.newValue) : String(ch.newValue ?? '');
+    tr.appendChild(keyTd);
+    tr.appendChild(newTd);
+    tr.appendChild(oldTd);
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  return table;
 }
 
 // 初始化

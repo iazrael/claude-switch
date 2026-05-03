@@ -114,11 +114,15 @@ describe('Profile Manager', () => {
     expect(rawToken).toContain(':');
   });
 
-  it('应该能列出 profiles 备份', async () => {
+  it('应该能列出 profiles 备份（返回对象数组）', async () => {
     await manager.addProfile('backup-test-1', TEST_ENV);
     await manager.addProfile('backup-test-1', { ...TEST_ENV, ANTHROPIC_BASE_URL: 'https://v2.test' });
     const backups = await manager.getBackups('profiles');
     expect(backups.length).toBeGreaterThanOrEqual(1);
+    // 新格式：对象数组
+    expect(backups[0]).toHaveProperty('fileName');
+    expect(backups[0]).toHaveProperty('timestamp');
+    expect(backups[0]).toHaveProperty('reason');
   });
 });
 
@@ -156,6 +160,78 @@ describe('Crypto Utils', () => {
   it('needsReEncrypt 对非加密数据返回 false', async () => {
     const { needsReEncrypt } = await import('../lib/crypto-utils');
     expect(needsReEncrypt('plaintext')).toBe(false);
+  });
+});
+
+// ========== Diff Utils Tests ==========
+
+describe('Diff Utils', () => {
+  let diffJSON;
+  beforeEach(async () => {
+    const mod = await import('../lib/diff');
+    diffJSON = mod.diffJSON;
+  });
+
+  it('空对象对比应无差异', () => {
+    const result = diffJSON({}, {});
+    expect(result.added).toEqual([]);
+    expect(result.removed).toEqual([]);
+    expect(result.changed).toEqual([]);
+    expect(result.unchanged).toEqual([]);
+  });
+
+  it('完全相同的对象应全部 unchanged', () => {
+    const obj = { a: '1', b: '2' };
+    const result = diffJSON(obj, obj);
+    expect(result.unchanged).toEqual(['a', 'b']);
+    expect(result.added).toEqual([]);
+    expect(result.removed).toEqual([]);
+    expect(result.changed).toEqual([]);
+  });
+
+  it('新增 key 应出现在 added', () => {
+    const result = diffJSON({ a: '1', b: '2' }, { a: '1' });
+    expect(result.added).toEqual(['b']);
+    expect(result.unchanged).toEqual(['a']);
+  });
+
+  it('删除 key 应出现在 removed', () => {
+    const result = diffJSON({ a: '1' }, { a: '1', b: '2' });
+    expect(result.removed).toEqual(['b']);
+    expect(result.unchanged).toEqual(['a']);
+  });
+
+  it('值变更应出现在 changed', () => {
+    const result = diffJSON({ a: 'new' }, { a: 'old' });
+    expect(result.changed).toHaveLength(1);
+    expect(result.changed[0].key).toBe('a');
+    expect(result.changed[0].newValue).toBe('new');
+    expect(result.changed[0].oldValue).toBe('old');
+  });
+
+  it('敏感字段值应被脱敏', () => {
+    const result = diffJSON(
+      { MY_TOKEN: 'secret-new', normal: 'same' },
+      { MY_TOKEN: 'secret-old', normal: 'same' },
+    );
+    expect(result.changed).toHaveLength(1);
+    expect(result.changed[0].newValue).toBe('••••••••');
+    expect(result.changed[0].oldValue).toBe('••••••••');
+    expect(result.unchanged).toContain('normal');
+  });
+
+  it('嵌套对象应正确对比', () => {
+    const current = { nested: { a: 1, b: 2 } };
+    const backup = { nested: { a: 1, b: 3 } };
+    const result = diffJSON(current, backup);
+    expect(result.changed).toHaveLength(1);
+    expect(result.changed[0].key).toBe('nested');
+  });
+
+  it('null/undefined 输入应安全处理', () => {
+    const result = diffJSON(null, null);
+    expect(result.added).toEqual([]);
+    expect(result.removed).toEqual([]);
   });
 });
 
@@ -284,7 +360,7 @@ describe('API Endpoints', () => {
   });
 
   describe('GET /api/backups/:type', () => {
-    it('应该能列出备份', async () => {
+    it('应该能列出备份（返回对象数组）', async () => {
       await request(app)
         .post('/api/profiles')
         .send({ name: 'backup-test', env: TEST_ENV });
@@ -292,11 +368,46 @@ describe('API Endpoints', () => {
       const res = await request(app).get('/api/backups/profiles');
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
+      if (res.body.length > 0) {
+        expect(res.body[0]).toHaveProperty('fileName');
+        expect(res.body[0]).toHaveProperty('timestamp');
+      }
     });
 
     it('无效类型应返回 500', async () => {
       const res = await request(app).get('/api/backups/invalid');
       expect(res.status).toBe(500);
+    });
+  });
+
+  describe('GET /api/backups/:type/:fileName/preview', () => {
+    it('应该能返回 diff 预览', async () => {
+      // 创建初始套餐
+      await request(app)
+        .post('/api/profiles')
+        .send({ name: 'preview-test', env: TEST_ENV });
+
+      // 修改它产生一个备份（addProfile -> update）
+      await request(app)
+        .post('/api/profiles')
+        .send({ name: 'preview-test', env: { ...TEST_ENV, ANTHROPIC_BASE_URL: 'https://changed.com' } });
+
+      // 获取备份列表
+      const listRes = await request(app).get('/api/backups/profiles');
+      expect(listRes.status).toBe(200);
+      expect(listRes.body.length).toBeGreaterThanOrEqual(1);
+
+      // 取第一个备份做预览
+      const backup = listRes.body[0];
+      const previewRes = await request(app).get(`/api/backups/profiles/${encodeURIComponent(backup.fileName)}/preview`);
+      expect(previewRes.status).toBe(200);
+      // profiles diff 应有 profiles 字段
+      expect(previewRes.body).toHaveProperty('profiles');
+    });
+
+    it('不存在的备份文件应返回 400', async () => {
+      const res = await request(app).get('/api/backups/profiles/nonexistent.json/preview');
+      expect(res.status).toBe(400);
     });
   });
 
