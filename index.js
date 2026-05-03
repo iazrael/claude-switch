@@ -18,8 +18,9 @@ async function addProfileUI(name) {
   const envAnswers = await inquirer.prompt([
     { type: 'input', name: 'ANTHROPIC_AUTH_TOKEN', message: 'API Key' },
     { type: 'input', name: 'ANTHROPIC_BASE_URL', message: 'Base URL' },
-    { type: 'input', name: 'ANTHROPIC_MODEL', message: '模型名称' },
-    { type: 'input', name: 'ANTHROPIC_SMALL_FAST_MODEL', message: '轻量模型（可选）' },
+    { type: 'input', name: 'ANTHROPIC_DEFAULT_SONNET_MODEL', message: 'Sonnet 模型（日常开发主力）' },
+    { type: 'input', name: 'ANTHROPIC_DEFAULT_OPUS_MODEL', message: 'Opus 模型（复杂任务，可选）' },
+    { type: 'input', name: 'ANTHROPIC_DEFAULT_HAIKU_MODEL', message: 'Haiku 模型（轻量任务，可选）' },
   ]);
 
   const env = {};
