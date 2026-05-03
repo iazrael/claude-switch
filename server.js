@@ -5,7 +5,7 @@ const manager = require('./lib/profile-manager');
 const { getLogs } = require('./lib/logger');
 
 const app = express();
-const PORT = 3333;
+const PORT = parseInt(process.env.CLAUDE_SWITCH_PORT || '3333', 10);
 
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
