@@ -313,7 +313,7 @@ node index.js switch
 |---|---|---|
 | `CLAUDE_SWITCH_DIR` | `~/.claude-switch` | 数据存储目录（仅影响 profiles/backups/logs） |
 | `CLAUDE_SETTINGS_PATH` | `~/.claude/settings.json` | Claude Code 配置文件路径 |
-| `PORT` | 3333 | Web 服务器端口（需修改代码） |
+| `CLAUDE_SWITCH_PORT` | `3333` | Web 服务器端口 |
 
 ---
 
