@@ -213,6 +213,7 @@ program
 if (process.argv.length === 2) {
   (async () => {
     try {
+      await manager.init();
       await firstInstallImport();
       await switchProfileUI();
     } catch (err) {
@@ -221,5 +222,7 @@ if (process.argv.length === 2) {
     }
   })();
 } else {
+  // 有参数时也确保 init
+  manager.init().catch(() => {});
   program.parse(process.argv);
 }

@@ -7,15 +7,17 @@ const { getLogs } = require('./lib/logger');
 const app = express();
 const PORT = parseInt(process.env.CLAUDE_SWITCH_PORT || '3333', 10);
 
+// 启动时执行一次迁移
+manager.init().catch(err => console.error('初始化迁移失败:', err.message));
+
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 套餐列表（脱敏）+ active + mismatch
+// 套餐列表（脱敏）+ active + mismatch（一次性读取）
 app.get('/api/profiles', async (req, res) => {
   try {
-    const data = await manager.getProfiles();
-    const mismatchInfo = await manager.checkMismatch();
+    const { data, mismatchInfo } = await manager.getProfilesWithMismatch();
     const safe = {};
     for (const [name, pData] of Object.entries(data.profiles)) {
       safe[name] = { env: { ...pData.env } };
@@ -94,11 +96,11 @@ app.post('/api/switch', async (req, res) => {
   }
 });
 
-// 当前生效环境 + activeProfile + mismatch
+// 当前生效环境 + activeProfile + mismatch（一次性读取）
 app.get('/api/current', async (req, res) => {
   try {
+    const { mismatchInfo } = await manager.getProfilesWithMismatch();
     const env = await manager.getCurrentEnv();
-    const mismatchInfo = await manager.checkMismatch();
     const safeEnv = { ...env };
     if (safeEnv.ANTHROPIC_AUTH_TOKEN) {
       safeEnv.ANTHROPIC_AUTH_TOKEN = '••••••••';

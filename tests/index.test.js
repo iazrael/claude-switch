@@ -5,6 +5,7 @@ import path from 'path';
 import os from 'os';
 
 const TMP_DIR = path.join(os.tmpdir(), `cs-test-${process.pid}`);
+const TMP_SETTINGS = path.join(TMP_DIR, 'settings.json');
 
 const TEST_ENV = {
   ANTHROPIC_AUTH_TOKEN: 'sk-test-abc123',
@@ -21,13 +22,14 @@ async function cleanAll() {
 
 // Set env before requiring modules
 process.env.CLAUDE_SWITCH_DIR = TMP_DIR;
+process.env.CLAUDE_SETTINGS_PATH = TMP_SETTINGS;
 
 const manager = await import('../lib/profile-manager');
 const app = (await import('../server')).default;
 
 // Path constants matching the config with env override
 const PROFILES_PATH = path.join(TMP_DIR, 'profiles.json');
-const SETTINGS_PATH = path.join(os.homedir(), '.claude', 'settings.json');
+const SETTINGS_PATH = TMP_SETTINGS;
 
 // ========== Profile Manager Tests ==========
 
@@ -135,7 +137,9 @@ describe('Profile Manager', () => {
       'old-profile': { env: { ANTHROPIC_AUTH_TOKEN: 'sk-old', ANTHROPIC_BASE_URL: 'https://old.com' } },
     };
     await fs.writeJson(PROFILES_PATH, oldFormat, { spaces: 2 });
-    // 读取触发迁移
+    // 重置 init 状态并触发迁移
+    manager._resetInit();
+    await manager.init();
     const data = await manager.getProfiles();
     expect(data.profiles).toBeDefined();
     expect(data.profiles['old-profile']).toBeDefined();
@@ -147,6 +151,8 @@ describe('Profile Manager', () => {
       'test': { env: { ANTHROPIC_AUTH_TOKEN: 'sk-test', ANTHROPIC_BASE_URL: 'https://test.com' } },
     };
     await fs.writeJson(PROFILES_PATH, oldFormat, { spaces: 2 });
+    manager._resetInit();
+    await manager.init();
     const data = await manager.getProfiles();
     expect(data.active).toBe('');
   });
@@ -166,10 +172,9 @@ describe('Profile Manager', () => {
     delete raw.profiles['fallback-test'];
     raw.active = 'fallback-test';
     await fs.writeJson(PROFILES_PATH, raw, { spaces: 2 });
-    // getActiveProfile 应 fallback
+    // settings.json 中仍有该套餐的 env，但 profiles 里已无该套餐
+    // fallback 比对需要在 profiles 里找到匹配的套餐，套餐已删除所以返回 null
     const activeName = await manager.getActiveProfile();
-    // 因为 env 已经被 switch 写入了 settings，fallback 环境比对应该能匹配
-    // 但套餐已删除所以 profiles 里没有匹配项
     expect(activeName).toBeNull();
   });
 
@@ -226,7 +231,8 @@ describe('Profile Manager', () => {
       'migration-test': { env: { ANTHROPIC_AUTH_TOKEN: 'sk-mig', ANTHROPIC_BASE_URL: 'https://mig.com' } },
     };
     await fs.writeJson(PROFILES_PATH, oldFormat, { spaces: 2 });
-    await manager.getProfiles();
+    manager._resetInit();
+    await manager.init();
     const backups = await manager.getBackups('profiles');
     const migrationBackup = backups.find(b => b.reason === 'migration');
     expect(migrationBackup).toBeDefined();
