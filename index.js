@@ -64,13 +64,25 @@ async function switchProfileUI(name) {
   const names = await manager.getAllProfileNames();
   if (names.length === 0) return console.log(chalk.red('请先添加套餐'));
 
+  // 获取当前 active 套餐
+  const currentProfile = await manager.getActiveProfile();
+
   if (!name) {
+    const choices = names.map(n => {
+      const isCurrent = n === currentProfile;
+      return {
+        name: isCurrent ? `${n} ${chalk.green('(当前)')}` : n,
+        value: n,
+      };
+    });
     const answer = await inquirer.prompt([
       {
         type: 'list',
         name: 'name',
-        message: '选择要切换的套餐：',
-        choices: names,
+        message: currentProfile
+          ? `选择要切换的套餐（当前: ${currentProfile}）：`
+          : '选择要切换的套餐（当前: 未知）：',
+        choices,
       },
     ]);
     name = answer.name;
