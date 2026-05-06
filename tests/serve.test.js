@@ -1,3 +1,4 @@
+// NOTE: 测试文件使用 ESM 语法，与 tests/index.test.js 保持一致。Vitest 原生支持 ESM。
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs-extra';
 import path from 'path';
@@ -17,7 +18,7 @@ const require = createRequire(import.meta.url);
 
 const config = require('../lib/config');
 const serve = require('../lib/serve');
-const { readPidFile, writePidFile, cleanupPid, ensureNotRunning, isAlive, resolvePort, formatUptime, rotateLogIfNeeded, waitForExit } = serve._internal;
+const { readPidFile, writePidFile, cleanupPid, ensureNotRunning, isAlive, resolvePort, formatUptime, rotateLogIfNeeded, waitForExit, _activeSignalHandlers, cleanupSignalHandlers } = serve._internal;
 
 describe('serve 命令', () => {
   beforeEach(async () => {
@@ -53,6 +54,21 @@ describe('serve 命令', () => {
       await fs.writeFile(config.PID_PATH, JSON.stringify(data));
       const result = await readPidFile();
       expect(result).toEqual(data);
+    });
+
+    it('readPidFile 字段不完整返回 null', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // 缺少 port
+      await fs.writeFile(config.PID_PATH, JSON.stringify({ pid: 123, startedAt: '2026-05-06T10:00:00.000Z' }));
+      expect(await readPidFile()).toBeNull();
+      // 缺少 startedAt
+      await fs.writeFile(config.PID_PATH, JSON.stringify({ pid: 123, port: 8080 }));
+      expect(await readPidFile()).toBeNull();
+      // 空对象
+      await fs.writeFile(config.PID_PATH, JSON.stringify({}));
+      expect(await readPidFile()).toBeNull();
+      expect(consoleSpy).toHaveBeenCalledTimes(3);
+      consoleSpy.mockRestore();
     });
 
     it('readPidFile 文件不存在返回 null', async () => {
@@ -109,6 +125,29 @@ describe('serve 命令', () => {
       expect(resolvePort()).toBe(9999);
       if (orig) process.env.CLAUDE_SWITCH_PORT = orig;
       else delete process.env.CLAUDE_SWITCH_PORT;
+    });
+
+    it('resolvePort: 非数字端口报错', () => {
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+        throw new Error(`process.exit(${code})`);
+      });
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      expect(() => resolvePort('abc')).toThrow(/process\.exit/);
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('1-65535'));
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it('resolvePort: 超范围端口报错', () => {
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+        throw new Error(`process.exit(${code})`);
+      });
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      expect(() => resolvePort('99999')).toThrow(/process\.exit/);
+      expect(() => resolvePort('0')).toThrow(/process\.exit/);
+      expect(() => resolvePort('-1')).toThrow(/process\.exit/);
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
     });
 
     it('formatUptime 格式化正确', () => {
@@ -173,12 +212,8 @@ describe('serve 命令', () => {
       const pidContent = await readPidFile();
       expect(pidContent).not.toBeNull();
 
-      // 直接清理：关闭 server 并删除 PID 文件
-      await cleanupPid();
-      // 由于 startForeground 注册了信号处理，我们手动触发关闭流程不太方便
-      // 直接移除信号监听器避免干扰后续测试
-      process.removeAllListeners('SIGINT');
-      process.removeAllListeners('SIGTERM');
+      // 清理信号处理器（只移除当前注册的，不影响其他测试）
+      cleanupSignalHandlers();
 
       exitSpy.mockRestore();
     }, 10000);
@@ -201,10 +236,8 @@ describe('serve 命令', () => {
       expect(exitSpy).toHaveBeenCalledWith(1);
       expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('已被占用'));
 
-      exitSpy.mockRestore();
       errorSpy.mockRestore();
-      process.removeAllListeners('SIGINT');
-      process.removeAllListeners('SIGTERM');
+      cleanupSignalHandlers();
       await new Promise(resolve => blocker.close(resolve));
     });
   });
@@ -257,6 +290,39 @@ describe('serve 命令', () => {
       expect(exists).toBe(false);
       logSpy.mockRestore();
     });
+  });
+
+  // ─── daemon 端到端测试 ───
+
+  describe('startDaemon 端到端', () => {
+    it('daemon 启动后 PID 文件正确创建', async () => {
+      const port = 20000 + Math.floor(Math.random() * 1000);
+
+      await serve.startDaemon(port);
+
+      // 验证 PID 文件存在且内容正确
+      const pidInfo = await readPidFile();
+      expect(pidInfo).not.toBeNull();
+      expect(pidInfo.port).toBe(port);
+      expect(typeof pidInfo.pid).toBe('number');
+      expect(pidInfo.startedAt).toBeDefined();
+
+      // 验证进程存活
+      expect(isAlive(pidInfo.pid)).toBe(true);
+
+      // 验证 HTTP 可访问
+      await new Promise((resolve, reject) => {
+        http.get(`http://localhost:${port}/api/presets`, (res) => {
+          expect(res.statusCode).toBe(200);
+          resolve();
+        }).on('error', reject);
+      });
+
+      // 停止 daemon
+      await serve.stop();
+      const pidInfoAfter = await readPidFile();
+      expect(pidInfoAfter).toBeNull();
+    }, 20000);
   });
 
   // ─── 文件权限测试 ───
