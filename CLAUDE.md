@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-Claude Code 套餐快速切换工具 (v2.2.0)，支持多服务商配置管理。提供 CLI 和 Web 两种操作模式，API Key 加密存储，操作自动备份和日志记录。
+Claude Code 套餐快速切换工具 (v2.3.0)，支持多服务商配置管理。提供 CLI 和 Web 两种操作模式，API Key 加密存储，操作自动备份和日志记录。
 
 核心场景：在阿里云百炼、火山引擎、智谱AI、DeepSeek 等 Anthropic API 兼容服务商之间一键切换 Claude Code 的环境变量配置。
 
@@ -109,6 +109,8 @@ npm run test:watch
 9. ~~**前端 XSS**~~: innerHTML 全改 textContent
 10. ~~**Express body 无限制**~~: 已设 1mb limit
 11. ~~**CLI 异常未兜底**~~: 无参入口已加 try-catch
+12. ~~**当前套餐误标**~~: 改为全量 env 对比（BASE_URL + 三个模型名），不再只对比 SONNET_MODEL
+13. ~~**另存为丢失 API Key**~~: 新增 clone API 在服务端复制真实 token，前端不接触明文
 
 ### 🟡 待改进
 

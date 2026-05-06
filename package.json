@@ -1,6 +1,6 @@
 {
   "name": "claude-switch",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Claude Code 套餐管理工具 - CLI + Web 管理端，支持日志备份和一键还原",
   "main": "lib/profile-manager.js",
   "bin": {

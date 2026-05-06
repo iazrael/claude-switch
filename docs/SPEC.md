@@ -1,6 +1,6 @@
 # Claude Switch - 产品规格说明书
 
-> 版本：2.2.0 | 最后更新：2026-05-03
+> 版本：2.3.0 | 最后更新：2026-05-06
 
 ---
 
@@ -162,6 +162,17 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 - 用户输入套餐名称（默认 "default"），确认后自动创建
 - CLI 无参启动时自动触发检测，也可在 Web 端首次访问时引导
 
+#### F16: 另存为新套餐（Clone）
+- 编辑已有套餐时，修改参数后可点击「另存为新套餐」按钮
+- 服务端克隆源套餐完整配置（含真实 API Key），再用修改值覆盖
+- 前端不接触真实 API Key，通过 `POST /api/profiles/clone` 在服务端闭环
+- 用途：基于现有套餐快速创建变体（如同厂商不同模型组合）
+
+#### F17: 当前套餐判断优化
+- 旧逻辑：仅对比 `ANTHROPIC_DEFAULT_SONNET_MODEL` 单字段，多套餐使用相同模型时会误标
+- 新逻辑：全量对比 `BASE_URL` + 三个模型名，完全匹配才标记为「当前」
+- 最多只有一个套餐显示「当前」标签
+
 ---
 
 ## 4. 技术规格
@@ -245,6 +256,7 @@ Claude Code 配置文件：`~/.claude/settings.json`
 | GET | `/api/profiles` | 套餐列表（Token 脱敏） | — | `{ name: { env: {...} } }` |
 | PUT | `/api/profiles/:name` | 编辑套餐（合并更新） | `{ env }` | `{ success: true }` |
 | POST | `/api/profiles` | 新增/更新套餐 | `{ name, env }` | `{ success: true }` |
+| POST | `/api/profiles/clone` | 克隆套餐（含真实 Key） | `{ source, name, overrides }` | `{ success: true }` |
 | DELETE | `/api/profiles/:name` | 删除套餐 | — | `{ success: true }` |
 | POST | `/api/switch` | 切换套餐 | `{ name }` | `{ success: true }` |
 | GET | `/api/current` | 当前环境（Token 脱敏） | — | `{ key: value }` |
@@ -253,6 +265,7 @@ Claude Code 配置文件：`~/.claude/settings.json`
 | GET | `/api/backups/:type/:fileName/preview` | 备份 diff 预览 | — | diff 结果 |
 | POST | `/api/restore` | 还原备份 | `{ type, backupFileName }` | `{ success: true }` |
 | GET | `/api/logs?date=` | 操作日志 | — | `[{ date, content }]` |
+| GET | `/api/first-install` | 首次安装检测 | — | `{ firstInstall, hasExisting, config }` |
 
 ### 4.6 加密实现
 

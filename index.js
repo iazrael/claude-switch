@@ -157,7 +157,7 @@ const program = new Command();
 program
   .name('claude-switch')
   .description('Claude Code 套餐快速切换工具')
-  .version('2.0.0');
+  .version('2.3.0');
 
 program
   .command('current')
