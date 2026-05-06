@@ -221,6 +221,42 @@ program
   .description('切换套餐')
   .action(switchProfileUI);
 
+// ─── serve 子命令 ───
+async function serveAction(opts) {
+  const serve = require('./lib/serve');
+  const { stop: stopFlag, status: statusFlag, daemon, port: portStr } = opts;
+
+  // 互斥校验
+  const controlFlags = [stopFlag, statusFlag].filter(Boolean).length;
+  const runFlags = [daemon, portStr].filter(Boolean).length;
+  if (controlFlags > 1) {
+    console.error(chalk.red('错误: --stop 和 --status 不能同时指定'));
+    process.exit(1);
+  }
+  if (controlFlags === 1 && runFlags > 0) {
+    console.error(chalk.red('错误: --stop/--status 与 -d/-p 互斥'));
+    process.exit(1);
+  }
+
+  // 端口解析：-p > CLAUDE_SWITCH_PORT > 3333
+  const port = serve._internal.resolvePort(portStr);
+
+  // 分发
+  if (stopFlag) return serve.stop();
+  if (statusFlag) return serve.status();
+  if (daemon) return serve.startDaemon(port);
+  return serve.startForeground(port);
+}
+
+program
+  .command('serve')
+  .description('启动 Web 管理服务')
+  .option('-p, --port <port>', '指定端口')
+  .option('-d, --daemon', '后台运行')
+  .option('--stop', '停止服务')
+  .option('--status', '查看服务状态')
+  .action(serveAction);
+
 // 无参数时默认进入切换（首次安装时先检查导入）
 if (process.argv.length === 2) {
   (async () => {
@@ -234,7 +270,11 @@ if (process.argv.length === 2) {
     }
   })();
 } else {
-  // 有参数时也确保 init
-  manager.init().catch(() => {});
-  program.parse(process.argv);
+  // 有参数时也确保 init 完成后再 parse
+  manager.init().then(() => {
+    program.parse(process.argv);
+  }).catch(err => {
+    console.error(chalk.red('初始化失败: ' + err.message));
+    process.exit(1);
+  });
 }
