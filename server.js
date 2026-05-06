@@ -52,6 +52,22 @@ app.put('/api/profiles/:name', async (req, res) => {
   }
 });
 
+// 克隆套餐（服务端复制，保留真实 token）
+app.post('/api/profiles/clone', async (req, res) => {
+  try {
+    const { source, name, overrides } = req.body;
+    if (!source || !name) throw new Error('缺少参数');
+    const profiles = await manager.getProfiles();
+    if (!profiles[source]) throw new Error(`源套餐 "${source}" 不存在`);
+    // 从源套餐的解密 env 开始，用 overrides 覆盖
+    const env = { ...profiles[source].env, ...(overrides || {}) };
+    await manager.addProfile(name, env);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 // 删除套餐
 app.delete('/api/profiles/:name', async (req, res) => {
   try {

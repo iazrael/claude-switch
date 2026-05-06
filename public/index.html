@@ -489,20 +489,19 @@ async function saveAsNewProfile() {
   const sonnet = document.getElementById('newSonnet').value.trim();
   const haiku = document.getElementById('newHaiku').value.trim();
 
-  const env = {};
-  if (token) env.ANTHROPIC_AUTH_TOKEN = token;
-  if (baseUrl) env.ANTHROPIC_BASE_URL = baseUrl;
-  if (opus) env.ANTHROPIC_DEFAULT_OPUS_MODEL = opus;
-  if (sonnet) env.ANTHROPIC_DEFAULT_SONNET_MODEL = sonnet;
-  if (haiku) env.ANTHROPIC_DEFAULT_HAIKU_MODEL = haiku;
-
-  if (Object.keys(env).length === 0) return showToast('请至少修改一项参数');
+  // 收集用户修改的字段
+  const overrides = {};
+  if (token) overrides.ANTHROPIC_AUTH_TOKEN = token;
+  if (baseUrl) overrides.ANTHROPIC_BASE_URL = baseUrl;
+  if (opus) overrides.ANTHROPIC_DEFAULT_OPUS_MODEL = opus;
+  if (sonnet) overrides.ANTHROPIC_DEFAULT_SONNET_MODEL = sonnet;
+  if (haiku) overrides.ANTHROPIC_DEFAULT_HAIKU_MODEL = haiku;
 
   try {
-    await fetchJSON(`${API}/profiles`, {
+    await fetchJSON(`${API}/profiles/clone`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newName.trim(), env })
+      body: JSON.stringify({ source: editingProfile, name: newName.trim(), overrides })
     });
     showToast('已另存为新套餐「' + newName.trim() + '」');
     clearForm();
