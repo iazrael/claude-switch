@@ -49,13 +49,8 @@ claude-switch/
 ```bash
 git clone https://github.com/AzraelYan/claude-switch.git
 cd claude-switch
-npm install
-```
-
-注册为全局命令（可选，推荐）：
-
-```bash
-npm link
+pnpm install
+pnpm link
 ```
 
 执行后 `claude-switch` 命令可在任意目录直接使用。不再需要时执行 `npm unlink -g claude-switch` 即可移除。
@@ -64,7 +59,7 @@ npm link
 
 ### CLI 模式
 
-安装时执行了 `npm link` 后，可在任意终端直接使用：
+安装时执行了 `pnpm link` 后，可在任意终端直接使用：
 
 ```bash
 # 无参数直接运行 → 首次运行会检测并导入现有配置，之后进入交互式切换菜单

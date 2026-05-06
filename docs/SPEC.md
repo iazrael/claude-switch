@@ -424,7 +424,8 @@ Claude Code 配置文件：`~/.claude/settings.json`
 ```bash
 git clone https://github.com/iazrael/claude-switch.git
 cd claude-switch
-npm install
+pnpm install
+pnpm link
 ```
 
 ### 6.3 启动方式
