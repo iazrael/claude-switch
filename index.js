@@ -85,9 +85,20 @@ async function switchProfileUI(name) {
 
 // 查看当前 env
 async function showCurrent() {
+  const data = await manager.checkMismatch();
   const env = await manager.getCurrentEnv();
   if (Object.keys(env).length === 0)
     return console.log(chalk.cyan('当前未配置环境变量'));
+
+  if (data.active) {
+    console.log(chalk.cyan(`当前套餐: ${chalk.green(data.active)}`));
+    if (data.mismatch) {
+      console.log(chalk.yellow('⚠️  环境已变更（当前 settings.json 与选中套餐不一致）'));
+    }
+  } else {
+    console.log(chalk.cyan('当前套餐: ') + chalk.yellow('未知'));
+  }
+
   console.log(chalk.cyan('当前 settings.json 中的 env：'));
   for (const [k, v] of Object.entries(env)) {
     const val = k.toLowerCase().includes('token') ? '***' : v;
@@ -97,13 +108,25 @@ async function showCurrent() {
 
 // 列出所有套餐
 async function listProfiles() {
-  const profiles = await manager.getProfiles();
+  const profileData = await manager.getProfiles();
+  const mismatchInfo = await manager.checkMismatch();
+  const profiles = profileData.profiles || {};
   const names = Object.keys(profiles);
   if (names.length === 0)
     return console.log(chalk.yellow('没有已保存的套餐'));
+
   console.log(chalk.cyan('已保存的套餐：'));
   for (const name of names) {
-    console.log(`  ${chalk.green('■')} ${name}`);
+    const isActive = name === mismatchInfo.active;
+    const prefix = isActive ? chalk.green('●') : chalk.green('■');
+    let line = `  ${prefix} ${name}`;
+    if (isActive) {
+      line += chalk.green(' [当前]');
+      if (mismatchInfo.mismatch) {
+        line += chalk.yellow(' [环境已变更]');
+      }
+    }
+    console.log(line);
     const env = profiles[name].env;
     for (const [k, v] of Object.entries(env || {})) {
       const val = k.toLowerCase().includes('token') ? '***' : v;
@@ -157,7 +180,7 @@ const program = new Command();
 program
   .name('claude-switch')
   .description('Claude Code 套餐快速切换工具')
-  .version('2.3.0');
+  .version('3.0.0');
 
 program
   .command('current')
@@ -190,6 +213,7 @@ program
 if (process.argv.length === 2) {
   (async () => {
     try {
+      await manager.init();
       await firstInstallImport();
       await switchProfileUI();
     } catch (err) {
@@ -198,5 +222,7 @@ if (process.argv.length === 2) {
     }
   })();
 } else {
+  // 有参数时也确保 init
+  manager.init().catch(() => {});
   program.parse(process.argv);
 }

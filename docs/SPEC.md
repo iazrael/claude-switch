@@ -1,6 +1,6 @@
 # Claude Switch - 产品规格说明书
 
-> 版本：2.3.0 | 最后更新：2026-05-06
+> 版本：3.0.0 | 最后更新：2026-05-06
 
 ---
 
@@ -92,6 +92,7 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 #### F4: 切换套餐
 - 点击「切换」按钮，将该套餐的环境变量写入 `~/.claude/settings.json`
 - 切换前自动备份当前 settings.json
+- 将 `profiles.json` 的 `active` 字段更新为该套餐名称
 - 提示用户重启 Claude Code 以使配置生效
 
 ### 3.2 安全
@@ -168,10 +169,29 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 - 前端不接触真实 API Key，通过 `POST /api/profiles/clone` 在服务端闭环
 - 用途：基于现有套餐快速创建变体（如同厂商不同模型组合）
 
-#### F17: 当前套餐判断优化
-- 旧逻辑：仅对比 `ANTHROPIC_DEFAULT_SONNET_MODEL` 单字段，多套餐使用相同模型时会误标
-- 新逻辑：全量对比 `BASE_URL` + 三个模型名，完全匹配才标记为「当前」
+#### F17: 当前套餐状态管理（v3.0 重构）
+- `profiles.json` 新增 `active` 字段，记录当前选中的套餐名称
+- `profiles.json` 结构调整为 `{ active, profiles: { name: { env } } }`
+- 切换套餐时自动更新 `active` 字段
+- **判断优先级**：
+  1. 读 `active` 字段，若指向的套餐存在于 `profiles` 中 → 直接标记为「当前」
+  2. `active` 为空或指向的套餐不存在 → fallback 到环境变量全量比对（BASE_URL + 三档模型名）
+  3. 均无法匹配 → 显示「未知」
 - 最多只有一个套餐显示「当前」标签
+
+#### F18: 环境一致性检测
+- 每次加载套餐列表时，将 `active` 对应套餐的 env 与 `settings.json` 实际 env 做 diff
+- **一致**：正常显示「当前」标签
+- **不一致**（用户手动改过 settings.json）：
+  - Web 端：在当前套餐卡片上显示⚠️警告标识 + 提示文案「当前环境与选中套餐不一致」
+  - CLI：`list` 命令输出中标注「[环境已变更]」
+- 不一致时不改变 `active` 的值，仅提示
+
+#### F19: 旧格式自动迁移
+- 首次加载时检测 profiles.json 格式
+- **旧格式**（顶层直接是套餐对象）：自动迁移为新格式 `{ active: "", profiles: { ... } }`
+- 迁移时 `active` 置空，首次打开 Web/CLI 时通过 fallback 环境变量比对自动填充
+- 迁移前自动备份（reason: `migration`）
 
 ---
 
@@ -239,7 +259,7 @@ claude-switch/
 
 ```
 ~/.claude-switch/
-├── profiles.json     # 套餐配置（Token 加密存储）
+├── profiles.json     # 套餐配置（Token 加密存储），结构见 4.4.1
 ├── backups/          # 自动备份（按时间戳命名）
 │   ├── profiles-2026-04-26T14-30-00-000Z.json
 │   └── settings-2026-04-26T14-30-00-000Z.json
@@ -247,19 +267,45 @@ claude-switch/
     └── 2026-04-26.log
 ```
 
+#### 4.4.1 profiles.json 结构（v3.0）
+
+```json
+{
+  "active": "aliyun-pro",
+  "profiles": {
+    "aliyun-pro": {
+      "env": {
+        "ANTHROPIC_AUTH_TOKEN": "加密密文",
+        "ANTHROPIC_BASE_URL": "https://coding.dashscope.aliyuncs.com/apps/anthropic",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": "qwen3.5-max",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL": "qwen3.5-plus",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL": "qwen3.5-turbo"
+      }
+    },
+    "deepseek": {
+      "env": { ... }
+    }
+  }
+}
+```
+
+- `active`：当前选中的套餐名称（字符串），无选中时为空字符串
+- `profiles`：套餐集合，key 为套餐名
+- 旧格式（顶层直接是 `{ name: { env } }`）在首次加载时自动迁移
+
 Claude Code 配置文件：`~/.claude/settings.json`
 
 ### 4.5 API 接口
 
 | 方法 | 路径 | 说明 | 请求体 | 返回 |
 |---|---|---|---|---|
-| GET | `/api/profiles` | 套餐列表（Token 脱敏） | — | `{ name: { env: {...} } }` |
+| GET | `/api/profiles` | 套餐列表 + 活跃状态（Token 脱敏） | — | `{ active: string \| null, profiles: { name: { env: {...} } }, mismatch: boolean \| null }` |
 | PUT | `/api/profiles/:name` | 编辑套餐（合并更新） | `{ env }` | `{ success: true }` |
 | POST | `/api/profiles` | 新增/更新套餐 | `{ name, env }` | `{ success: true }` |
 | POST | `/api/profiles/clone` | 克隆套餐（含真实 Key） | `{ source, name, overrides }` | `{ success: true }` |
 | DELETE | `/api/profiles/:name` | 删除套餐 | — | `{ success: true }` |
 | POST | `/api/switch` | 切换套餐 | `{ name }` | `{ success: true }` |
-| GET | `/api/current` | 当前环境（Token 脱敏） | — | `{ key: value }` |
+| GET | `/api/current` | 当前环境（Token 脱敏）+ 一致性状态 | — | `{ env: { key: value }, activeProfile: string \| null, mismatch: boolean \| null }` |
 | GET | `/api/presets` | 预设模板列表 | — | `{ key: { label, baseUrl, ... } }` |
 | GET | `/api/backups/:type` | 备份列表 | — | `[{fileName, reason, timestamp}, ...]` |
 | GET | `/api/backups/:type/:fileName/preview` | 备份 diff 预览 | — | diff 结果 |

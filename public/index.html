@@ -14,6 +14,7 @@
       --accent: #6366f1;
       --danger: #ef4444;
       --success: #22c55e;
+      --warning: #f59e0b;
       --radius: 12px;
     }
     @media (prefers-color-scheme: dark) {
@@ -74,6 +75,10 @@
     .current-badge {
       background: var(--success); color: white; padding: 2px 8px;
       border-radius: 10px; font-size: 0.75rem; margin-left: 8px;
+    }
+    .mismatch-badge {
+      background: var(--warning); color: white; padding: 2px 8px;
+      border-radius: 10px; font-size: 0.75rem; margin-left: 4px;
     }
     .log-text {
       white-space: pre-wrap; font-family: monospace; font-size: 0.8rem;
@@ -210,7 +215,6 @@ async function fetchJSON(url, opt) {
 async function loadPresets() {
   presets = await fetchJSON(`${API}/presets`);
   const select = document.getElementById('presetSelect');
-  // 清空并重建选项
   while (select.firstChild) select.removeChild(select.firstChild);
   const defaultOpt = document.createElement('option');
   defaultOpt.value = '';
@@ -238,42 +242,50 @@ function applyPreset() {
 // 加载当前环境
 async function loadCurrent() {
   try {
-    const env = await fetchJSON(`${API}/current`);
+    const data = await fetchJSON(`${API}/current`);
+    const env = data.env || {};
+    const activeProfile = data.activeProfile;
+    const mismatch = data.mismatch;
+
     const keys = Object.keys(env);
     if (keys.length === 0) {
       document.getElementById('currentEnv').textContent = '未配置环境变量';
-      document.getElementById('currentName').textContent = '无';
-      return '';
+    } else {
+      document.getElementById('currentEnv').textContent = keys.map(k => k + ': ' + env[k]).join('\n');
     }
-    const lines = keys.map(k => k + ': ' + env[k]).join('\n');
-    document.getElementById('currentEnv').textContent = lines;
-    const model = env.ANTHROPIC_DEFAULT_SONNET_MODEL || env.ANTHROPIC_MODEL || '';
-    document.getElementById('currentName').textContent = model || '未知';
-    return model;
+
+    // 更新当前套餐名显示
+    const currentNameEl = document.getElementById('currentName');
+    if (activeProfile) {
+      const model = env.ANTHROPIC_DEFAULT_SONNET_MODEL || '';
+      let text = activeProfile + (model ? ' (' + model + ')' : '');
+      if (mismatch) {
+        text += ' ⚠️ 环境已变更';
+      }
+      currentNameEl.textContent = text;
+      currentNameEl.style.color = mismatch ? 'var(--warning)' : 'var(--accent)';
+    } else {
+      const model = env.ANTHROPIC_DEFAULT_SONNET_MODEL || '';
+      currentNameEl.textContent = model ? '未知 (' + model + ')' : '无';
+      currentNameEl.style.color = 'var(--accent)';
+    }
   } catch (e) {
     document.getElementById('currentEnv').textContent = '加载失败: ' + e.message;
-    return '';
   }
 }
 
 // 加载套餐列表
-// 判断两个 env 对象是否一致（忽略 token 字段，因为列表里 token 是脱敏的）
-function envMatches(env1, env2) {
-  const compareKeys = ['ANTHROPIC_BASE_URL', 'ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL'];
-  for (const key of compareKeys) {
-    if ((env1[key] || '') !== (env2[key] || '')) return false;
-  }
-  return true;
-}
-
 async function loadProfiles() {
   try {
-    const profiles = await fetchJSON(`${API}/profiles`);
-    const listDiv = document.getElementById('profileList');
-    const currentEnv = await fetchJSON(`${API}/current`);
+    const data = await fetchJSON(`${API}/profiles`);
+    const profiles = data.profiles || {};
+    const active = data.active;
+    const mismatch = data.mismatch;
     const names = Object.keys(profiles);
 
-    // 更新当前环境变量显示
+    // 更新当前环境变量显示（从 /api/current 获取）
+    const currentData = await fetchJSON(`${API}/current`);
+    const currentEnv = currentData.env || {};
     const currentEnvKeys = Object.keys(currentEnv);
     if (currentEnvKeys.length === 0) {
       document.getElementById('currentEnv').textContent = '未配置环境变量';
@@ -281,18 +293,24 @@ async function loadProfiles() {
       document.getElementById('currentEnv').textContent = currentEnvKeys.map(k => k + ': ' + currentEnv[k]).join('\n');
     }
 
-    // 通过全量对比 env 找当前套餐
-    let currentName = '未知';
-    for (const [name, p] of Object.entries(profiles)) {
-      if (envMatches(p.env || {}, currentEnv)) {
-        currentName = name;
-        break;
+    // 更新当前套餐名
+    const currentNameEl = document.getElementById('currentName');
+    if (active) {
+      const model = currentEnv.ANTHROPIC_DEFAULT_SONNET_MODEL || '';
+      let text = active + (model ? ' (' + model + ')' : '');
+      if (mismatch) {
+        text += ' ⚠️ 环境已变更';
       }
+      currentNameEl.textContent = text;
+      currentNameEl.style.color = mismatch ? 'var(--warning)' : 'var(--accent)';
+    } else {
+      const model = currentEnv.ANTHROPIC_DEFAULT_SONNET_MODEL || '';
+      currentNameEl.textContent = model ? '未知 (' + model + ')' : '无';
+      currentNameEl.style.color = 'var(--accent)';
     }
-    const currentModel = currentEnv.ANTHROPIC_DEFAULT_SONNET_MODEL || currentEnv.ANTHROPIC_MODEL || '';
-    document.getElementById('currentName').textContent = currentName + (currentModel ? ' (' + currentModel + ')' : '');
 
     // 清空列表
+    const listDiv = document.getElementById('profileList');
     while (listDiv.firstChild) listDiv.removeChild(listDiv.firstChild);
 
     if (names.length === 0) {
@@ -307,7 +325,7 @@ async function loadProfiles() {
       const env = profiles[name].env || {};
       const model = env.ANTHROPIC_DEFAULT_SONNET_MODEL || env.ANTHROPIC_MODEL || '无模型';
       const baseUrl = env.ANTHROPIC_BASE_URL || '';
-      const isCurrent = (name === currentName);
+      const isCurrent = (name === active);
 
       const item = document.createElement('div');
       item.className = 'profile-item';
@@ -323,12 +341,16 @@ async function loadProfiles() {
         badge.className = 'current-badge';
         badge.textContent = '当前';
         nameDiv.appendChild(badge);
+        if (mismatch) {
+          const mismatchBadge = document.createElement('span');
+          mismatchBadge.className = 'mismatch-badge';
+          mismatchBadge.textContent = '⚠️ 环境已变更';
+          nameDiv.appendChild(mismatchBadge);
+        }
       }
 
       const metaDiv = document.createElement('div');
       metaDiv.className = 'profile-meta';
-      metaDiv.textContent = '模型：' + model + '\nBase：' + (baseUrl || '默认');
-      // 用 <br> 替换换行
       metaDiv.innerHTML = '';
       metaDiv.appendChild(document.createTextNode('模型：' + model));
       metaDiv.appendChild(document.createElement('br'));
@@ -403,7 +425,8 @@ async function deleteProfile(name) {
 // 编辑：从列表数据中填充表单，API Key 显示占位符
 async function editProfile(name) {
   try {
-    const profiles = await fetchJSON(`${API}/profiles`);
+    const data = await fetchJSON(`${API}/profiles`);
+    const profiles = data.profiles || {};
     const profile = profiles[name];
     if (!profile) return showToast('套餐不存在');
     editingProfile = name;
@@ -453,7 +476,6 @@ async function addOrUpdateProfile() {
 
   try {
     if (editingProfile) {
-      // 编辑模式：用 PUT 合并更新
       if (!token && Object.keys(env).length === 0) return showToast('请至少填写一项');
       await fetchJSON(`${API}/profiles/${encodeURIComponent(editingProfile)}`, {
         method: 'PUT',
@@ -462,7 +484,6 @@ async function addOrUpdateProfile() {
       });
       showToast('套餐「' + name + '」已更新');
     } else {
-      // 新增模式
       if (!token) return showToast('请填写 API Key');
       await fetchJSON(`${API}/profiles`, {
         method: 'POST',
@@ -489,7 +510,6 @@ async function saveAsNewProfile() {
   const sonnet = document.getElementById('newSonnet').value.trim();
   const haiku = document.getElementById('newHaiku').value.trim();
 
-  // 收集用户修改的字段
   const overrides = {};
   if (token) overrides.ANTHROPIC_AUTH_TOKEN = token;
   if (baseUrl) overrides.ANTHROPIC_BASE_URL = baseUrl;
@@ -516,7 +536,6 @@ async function loadBackups() {
   try {
     const list = await fetchJSON(`${API}/backups/${type}`);
     const div = document.getElementById('backupList');
-    // 清空
     while (div.firstChild) div.removeChild(div.firstChild);
     if (list.length === 0) {
       div.textContent = '暂无备份';
@@ -609,7 +628,6 @@ async function showDiffPreview(type, fileName) {
     title.textContent = 'Diff 预览: ' + fileName;
     modal.appendChild(title);
     if (diff.profiles !== undefined) {
-      // profiles diff
       const info = document.createElement('div');
       info.style.marginBottom = '12px';
       info.style.fontSize = '0.85rem';
@@ -621,7 +639,6 @@ async function showDiffPreview(type, fileName) {
       if (diff.unchanged.length) parts.push('未变: ' + diff.unchanged.join(', '));
       info.textContent = parts.join(' | ') || '无差异';
       modal.appendChild(info);
-      // render each changed profile
       if (diff.changed.length > 0) {
         diff.changed.forEach(ch => {
           const sub = document.createElement('div');
@@ -637,7 +654,6 @@ async function showDiffPreview(type, fileName) {
         });
       }
     } else {
-      // settings diff (flat env)
       const table = buildDiffTable(diff.changed || []);
       const infoDiv = document.createElement('div');
       infoDiv.style.marginBottom = '8px';
