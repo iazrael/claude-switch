@@ -11,18 +11,23 @@ app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 套餐列表（脱敏）
+// 套餐列表（脱敏）+ active + mismatch
 app.get('/api/profiles', async (req, res) => {
   try {
-    const profiles = await manager.getProfiles();
+    const data = await manager.getProfiles();
+    const mismatchInfo = await manager.checkMismatch();
     const safe = {};
-    for (const [name, data] of Object.entries(profiles)) {
-      safe[name] = { env: { ...data.env } };
+    for (const [name, pData] of Object.entries(data.profiles)) {
+      safe[name] = { env: { ...pData.env } };
       if (safe[name].env.ANTHROPIC_AUTH_TOKEN) {
         safe[name].env.ANTHROPIC_AUTH_TOKEN = '••••••••';
       }
     }
-    res.json(safe);
+    res.json({
+      active: mismatchInfo.active,
+      profiles: safe,
+      mismatch: mismatchInfo.mismatch,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -57,10 +62,10 @@ app.post('/api/profiles/clone', async (req, res) => {
   try {
     const { source, name, overrides } = req.body;
     if (!source || !name) throw new Error('缺少参数');
-    const profiles = await manager.getProfiles();
-    if (!profiles[source]) throw new Error(`源套餐 "${source}" 不存在`);
+    const data = await manager.getProfiles();
+    if (!data.profiles[source]) throw new Error(`源套餐 "${source}" 不存在`);
     // 从源套餐的解密 env 开始，用 overrides 覆盖
-    const env = { ...profiles[source].env, ...(overrides || {}) };
+    const env = { ...data.profiles[source].env, ...(overrides || {}) };
     await manager.addProfile(name, env);
     res.json({ success: true });
   } catch (e) {
@@ -89,15 +94,20 @@ app.post('/api/switch', async (req, res) => {
   }
 });
 
-// 当前生效环境
+// 当前生效环境 + activeProfile + mismatch
 app.get('/api/current', async (req, res) => {
   try {
     const env = await manager.getCurrentEnv();
+    const mismatchInfo = await manager.checkMismatch();
     const safeEnv = { ...env };
     if (safeEnv.ANTHROPIC_AUTH_TOKEN) {
       safeEnv.ANTHROPIC_AUTH_TOKEN = '••••••••';
     }
-    res.json(safeEnv);
+    res.json({
+      env: safeEnv,
+      activeProfile: mismatchInfo.active,
+      mismatch: mismatchInfo.mismatch,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -27,6 +27,7 @@ const app = (await import('../server')).default;
 
 // Path constants matching the config with env override
 const PROFILES_PATH = path.join(TMP_DIR, 'profiles.json');
+const SETTINGS_PATH = path.join(os.homedir(), '.claude', 'settings.json');
 
 // ========== Profile Manager Tests ==========
 
@@ -36,10 +37,10 @@ describe('Profile Manager', () => {
 
   it('应该能添加套餐', async () => {
     await manager.addProfile('test-profile', TEST_ENV);
-    const profiles = await manager.getProfiles();
-    expect(profiles['test-profile']).toBeDefined();
-    expect(profiles['test-profile'].env.ANTHROPIC_BASE_URL).toBe('https://api.test.com/anthropic');
-    expect(profiles['test-profile'].env.ANTHROPIC_AUTH_TOKEN).toBe('sk-test-abc123');
+    const data = await manager.getProfiles();
+    expect(data.profiles['test-profile']).toBeDefined();
+    expect(data.profiles['test-profile'].env.ANTHROPIC_BASE_URL).toBe('https://api.test.com/anthropic');
+    expect(data.profiles['test-profile'].env.ANTHROPIC_AUTH_TOKEN).toBe('sk-test-abc123');
   });
 
   it('应该能获取所有套餐名', async () => {
@@ -54,8 +55,8 @@ describe('Profile Manager', () => {
   it('应该能删除套餐', async () => {
     await manager.addProfile('to-delete', TEST_ENV);
     await manager.removeProfile('to-delete');
-    const profiles = await manager.getProfiles();
-    expect(profiles['to-delete']).toBeUndefined();
+    const data = await manager.getProfiles();
+    expect(data.profiles['to-delete']).toBeUndefined();
   });
 
   it('删除不存在的套餐应该抛错', async () => {
@@ -64,9 +65,12 @@ describe('Profile Manager', () => {
 
   it('应该能切换套餐', async () => {
     await manager.addProfile('switch-target', TEST_ENV);
-    const profiles = await manager.getProfiles();
-    expect(profiles['switch-target']).toBeDefined();
-    expect(profiles['switch-target'].env.ANTHROPIC_AUTH_TOKEN).toBe('sk-test-abc123');
+    await manager.switchProfile('switch-target');
+    // 验证 active 更新
+    const data = await manager.getProfiles();
+    expect(data.profiles['switch-target']).toBeDefined();
+    expect(data.profiles['switch-target'].env.ANTHROPIC_AUTH_TOKEN).toBe('sk-test-abc123');
+    expect(data.active).toBe('switch-target');
   });
 
   it('切换到不存在的套餐应该抛错', async () => {
@@ -80,7 +84,6 @@ describe('Profile Manager', () => {
 
   it('应该能通过 updateProfile 更新套餐（非空字段覆盖，空字段保留）', async () => {
     await manager.addProfile('update-test', TEST_ENV);
-    // 只更新 baseUrl，不传 token（空字段保留原值）
     await manager.updateProfile('update-test', {
       ANTHROPIC_AUTH_TOKEN: '',
       ANTHROPIC_BASE_URL: 'https://updated.com',
@@ -88,10 +91,9 @@ describe('Profile Manager', () => {
       ANTHROPIC_DEFAULT_SONNET_MODEL: '',
       ANTHROPIC_DEFAULT_HAIKU_MODEL: '',
     });
-    const profiles = await manager.getProfiles();
-    expect(profiles['update-test'].env.ANTHROPIC_BASE_URL).toBe('https://updated.com');
-    // token 应该保留原值
-    expect(profiles['update-test'].env.ANTHROPIC_AUTH_TOKEN).toBe('sk-test-abc123');
+    const data = await manager.getProfiles();
+    expect(data.profiles['update-test'].env.ANTHROPIC_BASE_URL).toBe('https://updated.com');
+    expect(data.profiles['update-test'].env.ANTHROPIC_AUTH_TOKEN).toBe('sk-test-abc123');
   });
 
   it('updateProfile 不存在的套餐应该抛错', async () => {
@@ -102,14 +104,15 @@ describe('Profile Manager', () => {
     await manager.addProfile('modify-me', TEST_ENV);
     const updatedEnv = { ...TEST_ENV, ANTHROPIC_BASE_URL: 'https://updated.com' };
     await manager.addProfile('modify-me', updatedEnv);
-    const profiles = await manager.getProfiles();
-    expect(profiles['modify-me'].env.ANTHROPIC_BASE_URL).toBe('https://updated.com');
+    const data = await manager.getProfiles();
+    expect(data.profiles['modify-me'].env.ANTHROPIC_BASE_URL).toBe('https://updated.com');
   });
 
   it('profiles.json 中 Token 应该是加密存储的', async () => {
     await manager.addProfile('encrypted-test', TEST_ENV);
     const raw = await fs.readJson(PROFILES_PATH);
-    const rawToken = raw['encrypted-test'].env.ANTHROPIC_AUTH_TOKEN;
+    // v3.0 新格式
+    const rawToken = raw.profiles['encrypted-test'].env.ANTHROPIC_AUTH_TOKEN;
     expect(rawToken).not.toBe('sk-test-abc123');
     expect(rawToken).toContain(':');
   });
@@ -119,10 +122,114 @@ describe('Profile Manager', () => {
     await manager.addProfile('backup-test-1', { ...TEST_ENV, ANTHROPIC_BASE_URL: 'https://v2.test' });
     const backups = await manager.getBackups('profiles');
     expect(backups.length).toBeGreaterThanOrEqual(1);
-    // 新格式：对象数组
     expect(backups[0]).toHaveProperty('fileName');
     expect(backups[0]).toHaveProperty('timestamp');
     expect(backups[0]).toHaveProperty('reason');
+  });
+
+  // ---------- v3.0 新增测试 ----------
+
+  it('旧格式 profiles.json 应自动迁移', async () => {
+    // 手动写入旧格式
+    const oldFormat = {
+      'old-profile': { env: { ANTHROPIC_AUTH_TOKEN: 'sk-old', ANTHROPIC_BASE_URL: 'https://old.com' } },
+    };
+    await fs.writeJson(PROFILES_PATH, oldFormat, { spaces: 2 });
+    // 读取触发迁移
+    const data = await manager.getProfiles();
+    expect(data.profiles).toBeDefined();
+    expect(data.profiles['old-profile']).toBeDefined();
+    expect(data.active).toBe('');
+  });
+
+  it('迁移后 active 应为空字符串', async () => {
+    const oldFormat = {
+      'test': { env: { ANTHROPIC_AUTH_TOKEN: 'sk-test', ANTHROPIC_BASE_URL: 'https://test.com' } },
+    };
+    await fs.writeJson(PROFILES_PATH, oldFormat, { spaces: 2 });
+    const data = await manager.getProfiles();
+    expect(data.active).toBe('');
+  });
+
+  it('getActiveProfile 通过 active 字段识别', async () => {
+    await manager.addProfile('active-test', TEST_ENV);
+    await manager.switchProfile('active-test');
+    const activeName = await manager.getActiveProfile();
+    expect(activeName).toBe('active-test');
+  });
+
+  it('getActiveProfile active 指向不存在时 fallback', async () => {
+    await manager.addProfile('fallback-test', TEST_ENV);
+    await manager.switchProfile('fallback-test');
+    // 手动修改 profiles.json，删除该套餐但保留 active
+    const raw = await fs.readJson(PROFILES_PATH);
+    delete raw.profiles['fallback-test'];
+    raw.active = 'fallback-test';
+    await fs.writeJson(PROFILES_PATH, raw, { spaces: 2 });
+    // getActiveProfile 应 fallback
+    const activeName = await manager.getActiveProfile();
+    // 因为 env 已经被 switch 写入了 settings，fallback 环境比对应该能匹配
+    // 但套餐已删除所以 profiles 里没有匹配项
+    expect(activeName).toBeNull();
+  });
+
+  it('getActiveProfile 全部无法匹配返回 null', async () => {
+    // 空环境
+    const activeName = await manager.getActiveProfile();
+    expect(activeName).toBeNull();
+  });
+
+  it('checkMismatch 一致时返回 false', async () => {
+    await manager.addProfile('match-test', TEST_ENV);
+    await manager.switchProfile('match-test');
+    const result = await manager.checkMismatch();
+    expect(result.active).toBe('match-test');
+    expect(result.mismatch).toBe(false);
+  });
+
+  it('checkMismatch 不一致时返回 true', async () => {
+    await manager.addProfile('mismatch-test', TEST_ENV);
+    await manager.switchProfile('mismatch-test');
+    // 手动修改 settings.json 使不一致
+    const settings = await fs.readJson(SETTINGS_PATH);
+    settings.env.ANTHROPIC_BASE_URL = 'https://different.com';
+    await fs.writeJson(SETTINGS_PATH, settings, { spaces: 2 });
+    const result = await manager.checkMismatch();
+    expect(result.active).toBe('mismatch-test');
+    expect(result.mismatch).toBe(true);
+  });
+
+  it('checkMismatch 无 active 时返回 null', async () => {
+    const result = await manager.checkMismatch();
+    expect(result.active).toBeNull();
+    expect(result.mismatch).toBeNull();
+  });
+
+  it('switchProfile 应更新 active', async () => {
+    await manager.addProfile('switch-active', TEST_ENV);
+    await manager.switchProfile('switch-active');
+    const active = await manager.getActive();
+    expect(active).toBe('switch-active');
+  });
+
+  it('removeProfile 删除 active 套餐应清空 active', async () => {
+    await manager.addProfile('remove-active', TEST_ENV);
+    await manager.switchProfile('remove-active');
+    expect(await manager.getActive()).toBe('remove-active');
+    await manager.removeProfile('remove-active');
+    const active = await manager.getActive();
+    expect(active).toBe('');
+  });
+
+  it('迁移应产生 migration 备份', async () => {
+    const oldFormat = {
+      'migration-test': { env: { ANTHROPIC_AUTH_TOKEN: 'sk-mig', ANTHROPIC_BASE_URL: 'https://mig.com' } },
+    };
+    await fs.writeJson(PROFILES_PATH, oldFormat, { spaces: 2 });
+    await manager.getProfiles();
+    const backups = await manager.getBackups('profiles');
+    const migrationBackup = backups.find(b => b.reason === 'migration');
+    expect(migrationBackup).toBeDefined();
   });
 });
 
@@ -263,10 +370,12 @@ describe('API Endpoints', () => {
   afterEach(async () => { await fs.remove(TMP_DIR); });
 
   describe('GET /api/profiles', () => {
-    it('应该返回空的套餐列表', async () => {
+    it('应该返回空的套餐列表（新格式）', async () => {
       const res = await request(app).get('/api/profiles');
       expect(res.status).toBe(200);
-      expect(res.body).toEqual({});
+      expect(res.body.active).toBeNull();
+      expect(res.body.profiles).toEqual({});
+      expect(res.body.mismatch).toBeNull();
     });
 
     it('应该返回套餐列表（Token 脱敏）', async () => {
@@ -276,9 +385,22 @@ describe('API Endpoints', () => {
 
       const res = await request(app).get('/api/profiles');
       expect(res.status).toBe(200);
-      expect(res.body['test-api']).toBeDefined();
-      expect(res.body['test-api'].env.ANTHROPIC_AUTH_TOKEN).toBe('••••••••');
-      expect(res.body['test-api'].env.ANTHROPIC_BASE_URL).toBe('https://api.test.com/anthropic');
+      expect(res.body.profiles['test-api']).toBeDefined();
+      expect(res.body.profiles['test-api'].env.ANTHROPIC_AUTH_TOKEN).toBe('••••••••');
+      expect(res.body.profiles['test-api'].env.ANTHROPIC_BASE_URL).toBe('https://api.test.com/anthropic');
+    });
+
+    it('应该返回 active 和 mismatch', async () => {
+      await request(app)
+        .post('/api/profiles')
+        .send({ name: 'api-active', env: TEST_ENV });
+      await request(app)
+        .post('/api/switch')
+        .send({ name: 'api-active' });
+
+      const res = await request(app).get('/api/profiles');
+      expect(res.body.active).toBe('api-active');
+      expect(res.body.mismatch).toBe(false);
     });
   });
 
@@ -311,8 +433,7 @@ describe('API Endpoints', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
 
-      // 验证 token 保留原值，baseUrl 更新
-      const profiles = (await request(app).get('/api/profiles')).body;
+      const profiles = (await request(app).get('/api/profiles')).body.profiles;
       expect(profiles['update-api'].env.ANTHROPIC_BASE_URL).toBe('https://new-url.com');
     });
 
@@ -350,6 +471,23 @@ describe('API Endpoints', () => {
     });
   });
 
+  describe('GET /api/current', () => {
+    it('应该返回 activeProfile 和 mismatch', async () => {
+      await request(app)
+        .post('/api/profiles')
+        .send({ name: 'current-test', env: TEST_ENV });
+      await request(app)
+        .post('/api/switch')
+        .send({ name: 'current-test' });
+
+      const res = await request(app).get('/api/current');
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('env');
+      expect(res.body.activeProfile).toBe('current-test');
+      expect(res.body.mismatch).toBe(false);
+    });
+  });
+
   describe('GET /api/presets', () => {
     it('应该返回所有预设模板', async () => {
       const res = await request(app).get('/api/presets');
@@ -382,26 +520,21 @@ describe('API Endpoints', () => {
 
   describe('GET /api/backups/:type/:fileName/preview', () => {
     it('应该能返回 diff 预览', async () => {
-      // 创建初始套餐
       await request(app)
         .post('/api/profiles')
         .send({ name: 'preview-test', env: TEST_ENV });
 
-      // 修改它产生一个备份（addProfile -> update）
       await request(app)
         .post('/api/profiles')
         .send({ name: 'preview-test', env: { ...TEST_ENV, ANTHROPIC_BASE_URL: 'https://changed.com' } });
 
-      // 获取备份列表
       const listRes = await request(app).get('/api/backups/profiles');
       expect(listRes.status).toBe(200);
       expect(listRes.body.length).toBeGreaterThanOrEqual(1);
 
-      // 取第一个备份做预览
       const backup = listRes.body[0];
       const previewRes = await request(app).get(`/api/backups/profiles/${encodeURIComponent(backup.fileName)}/preview`);
       expect(previewRes.status).toBe(200);
-      // profiles diff 应有 profiles 字段
       expect(previewRes.body).toHaveProperty('profiles');
     });
 
@@ -443,10 +576,10 @@ describe('API Endpoints', () => {
           },
         });
 
-      // 2. 验证列表（Token 脱敏）
-      let list = (await request(app).get('/api/profiles')).body;
-      expect(list['workflow-test']).toBeDefined();
-      expect(list['workflow-test'].env.ANTHROPIC_AUTH_TOKEN).toBe('••••••••');
+      // 2. 验证列表（新格式，Token 脱敏）
+      let res = await request(app).get('/api/profiles');
+      expect(res.body.profiles['workflow-test']).toBeDefined();
+      expect(res.body.profiles['workflow-test'].env.ANTHROPIC_AUTH_TOKEN).toBe('••••••••');
 
       // 3. 更新（用 PUT，只更新 baseUrl）
       await request(app)
@@ -454,13 +587,25 @@ describe('API Endpoints', () => {
         .send({ env: { ANTHROPIC_BASE_URL: 'https://workflow-v2.test' } });
 
       // 4. 验证更新后 baseUrl 变了，token 保留
-      list = (await request(app).get('/api/profiles')).body;
-      expect(list['workflow-test'].env.ANTHROPIC_BASE_URL).toBe('https://workflow-v2.test');
+      res = await request(app).get('/api/profiles');
+      expect(res.body.profiles['workflow-test'].env.ANTHROPIC_BASE_URL).toBe('https://workflow-v2.test');
 
       // 5. 删除
       await request(app).delete('/api/profiles/workflow-test');
-      list = (await request(app).get('/api/profiles')).body;
-      expect(list['workflow-test']).toBeUndefined();
+      res = await request(app).get('/api/profiles');
+      expect(res.body.profiles['workflow-test']).toBeUndefined();
+    });
+
+    it('POST /api/switch 后 active 更新', async () => {
+      await request(app)
+        .post('/api/profiles')
+        .send({ name: 'switch-api-test', env: TEST_ENV });
+      await request(app)
+        .post('/api/switch')
+        .send({ name: 'switch-api-test' });
+
+      const res = await request(app).get('/api/profiles');
+      expect(res.body.active).toBe('switch-api-test');
     });
   });
 });
