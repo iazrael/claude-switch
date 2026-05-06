@@ -273,6 +273,14 @@ async function loadProfiles() {
     const currentEnv = await fetchJSON(`${API}/current`);
     const names = Object.keys(profiles);
 
+    // 更新当前环境变量显示
+    const currentEnvKeys = Object.keys(currentEnv);
+    if (currentEnvKeys.length === 0) {
+      document.getElementById('currentEnv').textContent = '未配置环境变量';
+    } else {
+      document.getElementById('currentEnv').textContent = currentEnvKeys.map(k => k + ': ' + currentEnv[k]).join('\n');
+    }
+
     // 通过全量对比 env 找当前套餐
     let currentName = '未知';
     for (const [name, p] of Object.entries(profiles)) {
@@ -703,6 +711,7 @@ function buildDiffTable(changes) {
 
 // 初始化
 loadPresets();
+loadCurrent();
 loadProfiles();
 </script>
 </body>
