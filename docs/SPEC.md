@@ -139,10 +139,11 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 - 推荐使用 pm2 常驻后台
 
 #### F12: CLI 命令行
-- `node index.js current` — 查看当前环境变量
-- `node index.js list` — 列出所有套餐
-- `node index.js add` — 交互式添加套餐
-- `node index.js switch` — 交互式切换套餐
+- `claude-switch current` — 查看当前环境变量
+- `claude-switch list` — 列出所有套餐
+- `claude-switch add` — 交互式添加套餐
+- `claude-switch switch` — 交互式切换套餐
+- `claude-switch serve` — 启动 Web 管理服务（见 F20-F25）
 
 #### F13: 备份原因标注
 - 备份文件名格式改为 `{type}-{timestamp}_{reason}.json`（下划线分隔 reason）
@@ -193,6 +194,56 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 - 迁移时 `active` 置空，首次打开 Web/CLI 时通过 fallback 环境变量比对自动填充
 - 迁移前自动备份（reason: `migration`）
 
+### 3.6 Serve 命令（内置服务管理）
+
+#### F20: claude-switch serve
+- 在 CLI 中新增 `serve` 子命令，统一管理 Web 服务的启动、停止、状态查询
+- 替代原有的 pm2 守护方案，不引入外部依赖，纯 Node.js 标准库实现
+- **命令接口**：
+  - `claude-switch serve` — 前台运行，默认端口 3333
+  - `claude-switch serve -p <port>` — 指定端口
+  - `claude-switch serve -d` — 后台运行（daemon）
+  - `claude-switch serve -d -p <port>` — 后台 + 指定端口
+  - `claude-switch serve --stop` — 停止运行中的服务
+  - `claude-switch serve --status` — 查看服务状态（PID、端口、运行时长）
+- **端口优先级**：`-p` 参数 > `CLAUDE_SWITCH_PORT` 环境变量 > 默认值 3333
+- **互斥规则**：`--stop` / `--status` 与 `-d` / `-p` 互斥，同时指定报错退出；`--stop` 与 `--status` 本身互斥
+
+#### F21: 防重复启动
+- 使用 PID 文件 `~/.claude-switch/server.pid` 记录运行中的进程
+- PID 文件内容为 JSON：`{ "pid": 12345, "port": 3333, "startedAt": "ISO-8601" }`
+- 启动前检查：
+  - PID 文件不存在 → 正常启动
+  - PID 文件存在 → `process.kill(pid, 0)` 检测进程存活
+    - 存活 → 报错退出，提示「服务已在运行，PID: xxx，端口: xxx」
+    - 不存活 → 清理 stale PID 文件，正常启动
+- 前台和后台模式均写入 PID 文件
+
+#### F22: 前台运行
+- 启动 Express 服务，绑定到指定端口
+- 写入 PID 文件
+- 捕获 `SIGINT` / `SIGTERM`，优雅关闭：停止接受新连接 → 等待现有请求完成（最多 5s） → 删除 PID 文件 → 退出
+- 打印：`管理端已启动 → http://localhost:PORT`
+
+#### F23: 后台运行（daemon）
+- 使用 `child_process.spawn` 启动子进程，传入内部参数 `--daemon-child`（用户不可直接使用）
+- 子进程 `detached: true`，父进程 `unref()` 后退出
+- 子进程 stdout/stderr 重定向到 `~/.claude-switch/server.log`
+- 父进程打印：`管理端已后台启动 → PID: xxx, http://localhost:PORT, 日志: ~/.claude-switch/server.log`
+- PID 文件由子进程写入（与前台模式共享同一逻辑）
+
+#### F24: 停止服务（--stop）
+- 读取 PID 文件，不存在 → 报错「服务未在运行」
+- 发送 `SIGTERM`，轮询进程退出（每 200ms，最多 5s）
+- 超时未退出 → `SIGKILL`
+- 清理 PID 文件
+- 打印「服务已停止，PID: xxx」
+
+#### F25: 状态查询（--status）
+- 读取 PID 文件，不存在 → 打印「服务未在运行」
+- 进程存活 → 打印：PID、端口、运行时长（从 startedAt 计算）
+- 进程不存活 → 打印「PID 文件存在但进程已退出（stale）」，建议执行 `serve --stop` 清理
+
 ---
 
 ## 4. 技术规格
@@ -228,7 +279,8 @@ claude-switch/
 │   ├── profile-manager.js  # 核心业务逻辑（CRUD、切换、预设模板）
 │   ├── backup.js           # 备份还原管理
 │   ├── diff.js             # JSON diff 工具
-│   └── logger.js           # 操作日志
+│   ├── logger.js           # 操作日志
+│   └── serve.js            # serve 命令逻辑（PID 管理、daemon spawn、stop、status）
 ├── public/
 │   └── index.html          # Web 管理页面（单文件 SPA，420行）
 ├── tests/
@@ -260,6 +312,8 @@ claude-switch/
 ```
 ~/.claude-switch/
 ├── profiles.json     # 套餐配置（Token 加密存储），结构见 4.4.1
+├── server.pid        # serve 运行状态（JSON，启动时写入，停止时删除）
+├── server.log        # serve 后台模式日志（追加写入）
 ├── backups/          # 自动备份（按时间戳命名）
 │   ├── profiles-2026-04-26T14-30-00-000Z.json
 │   └── settings-2026-04-26T14-30-00-000Z.json
@@ -376,16 +430,16 @@ npm install
 ### 6.3 启动方式
 
 ```bash
-# 前台运行
-node server.js
+# 推荐：使用 serve 命令
+claude-switch serve                  # 前台运行
+claude-switch serve -d               # 后台运行
+claude-switch serve -d -p 8080       # 后台 + 指定端口
+claude-switch serve --stop           # 停止
+claude-switch serve --status         # 查看状态
 
-# 后台常驻（推荐）
-pm2 start server.js --name claude-switch
-pm2 save
-
-# CLI 使用
-node index.js list
-node index.js switch
+# 兼容旧方式
+node server.js                       # 直接启动
+pm2 start server.js --name claude-switch  # pm2 守护
 ```
 
 ### 6.4 环境变量
