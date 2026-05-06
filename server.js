@@ -124,6 +124,28 @@ app.post('/api/restore', async (req, res) => {
   }
 });
 
+// 首次安装检测
+app.get('/api/first-install', async (req, res) => {
+  try {
+    const firstInstall = await manager.isFirstInstall();
+    if (!firstInstall) {
+      return res.json({ firstInstall: false });
+    }
+    const existing = await manager.detectExistingConfig();
+    if (!existing) {
+      return res.json({ firstInstall: true, hasExisting: false });
+    }
+    // 脱敏 token
+    const safe = { ...existing };
+    if (safe.ANTHROPIC_AUTH_TOKEN) {
+      safe.ANTHROPIC_AUTH_TOKEN = '••••••••';
+    }
+    res.json({ firstInstall: true, hasExisting: true, config: safe });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // 日志
 app.get('/api/logs', async (req, res) => {
   try {

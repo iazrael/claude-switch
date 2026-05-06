@@ -112,6 +112,46 @@ async function listProfiles() {
   }
 }
 
+// 首次安装：检测并导入现有 settings.json 配置
+async function firstInstallImport() {
+  if (!(await manager.isFirstInstall())) return false;
+
+  const existing = await manager.detectExistingConfig();
+  if (!existing) return false;
+
+  console.log(chalk.cyan('\n检测到当前 Claude Code 配置：'));
+  for (const [k, v] of Object.entries(existing)) {
+    const val = k.toLowerCase().includes('token') ? '***' : v;
+    console.log(`  ${chalk.green(k)}: ${val}`);
+  }
+  console.log('');
+
+  const { importIt } = await inquirer.prompt([
+    {
+      type: 'confirm',
+      name: 'importIt',
+      message: '是否将以上配置导入为第一个套餐？',
+      default: true,
+    },
+  ]);
+
+  if (!importIt) return false;
+
+  const { profileName } = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'profileName',
+      message: '请输入套餐名称：',
+      default: 'default',
+      validate: (v) => v.trim() ? true : '名称不能为空',
+    },
+  ]);
+
+  await manager.addProfile(profileName.trim(), existing);
+  console.log(chalk.green(`\n已导入套餐 "${profileName.trim()}"，可随时用 claude-switch switch 切换`));
+  return true;
+}
+
 // 命令行框架
 const program = new Command();
 program
@@ -146,10 +186,11 @@ program
   .description('切换套餐')
   .action(switchProfileUI);
 
-// 无参数时默认进入切换
+// 无参数时默认进入切换（首次安装时先检查导入）
 if (process.argv.length === 2) {
   (async () => {
     try {
+      await firstInstallImport();
       await switchProfileUI();
     } catch (err) {
       console.error(chalk.red('操作失败: ' + err.message));
