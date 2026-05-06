@@ -152,6 +152,7 @@
     <div class="form-group"><label>Haiku 模型</label><input id="newHaiku" placeholder="轻量任务模型"></div>
     <div class="row">
       <button class="btn btn-primary" onclick="addOrUpdateProfile()">保存套餐</button>
+      <button class="btn btn-outline" id="saveAsBtn" style="display:none" onclick="saveAsNewProfile()">另存为新套餐</button>
       <button class="btn btn-outline" onclick="clearForm()">清空表单</button>
     </div>
     <p class="hint">编辑已有套餐请先点击列表中的 ✏️ 按钮</p>
@@ -391,6 +392,7 @@ async function editProfile(name) {
     editingProfile = name;
     document.getElementById('newName').value = name;
     document.getElementById('newName').disabled = true;
+    document.getElementById('saveAsBtn').style.display = '';
     document.getElementById('newToken').value = '';
     document.getElementById('newToken').placeholder = '保持不变（留空不修改）';
     document.getElementById('newBaseUrl').value = profile.env.ANTHROPIC_BASE_URL || '';
@@ -407,6 +409,7 @@ async function editProfile(name) {
 function clearForm() {
   editingProfile = null;
   document.getElementById('newName').disabled = false;
+  document.getElementById('saveAsBtn').style.display = 'none';
   ['newName', 'newToken', 'newBaseUrl', 'newOpus', 'newSonnet', 'newHaiku'].forEach(id => {
     document.getElementById(id).value = '';
   });
@@ -454,6 +457,39 @@ async function addOrUpdateProfile() {
     clearForm();
     loadProfiles();
     loadCurrent();
+  } catch (e) {
+    showToast('保存失败: ' + e.message);
+  }
+}
+
+async function saveAsNewProfile() {
+  if (!editingProfile) return;
+  const newName = prompt('请输入新套餐名称：');
+  if (!newName || !newName.trim()) return;
+  const token = document.getElementById('newToken').value.trim();
+  const baseUrl = document.getElementById('newBaseUrl').value.trim();
+  const opus = document.getElementById('newOpus').value.trim();
+  const sonnet = document.getElementById('newSonnet').value.trim();
+  const haiku = document.getElementById('newHaiku').value.trim();
+
+  const env = {};
+  if (token) env.ANTHROPIC_AUTH_TOKEN = token;
+  if (baseUrl) env.ANTHROPIC_BASE_URL = baseUrl;
+  if (opus) env.ANTHROPIC_DEFAULT_OPUS_MODEL = opus;
+  if (sonnet) env.ANTHROPIC_DEFAULT_SONNET_MODEL = sonnet;
+  if (haiku) env.ANTHROPIC_DEFAULT_HAIKU_MODEL = haiku;
+
+  if (Object.keys(env).length === 0) return showToast('请至少修改一项参数');
+
+  try {
+    await fetchJSON(`${API}/profiles`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName.trim(), env })
+    });
+    showToast('已另存为新套餐「' + newName.trim() + '」');
+    clearForm();
+    loadProfiles();
   } catch (e) {
     showToast('保存失败: ' + e.message);
   }
