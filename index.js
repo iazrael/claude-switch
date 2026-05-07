@@ -262,6 +262,7 @@ if (process.argv.length === 2) {
   (async () => {
     try {
       await manager.init();
+      await firstInstallImport();
       await showCurrent();
     } catch (err) {
       console.error(chalk.red('操作失败: ' + err.message));
