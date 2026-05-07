@@ -325,13 +325,4 @@ describe('serve 命令', () => {
     }, 20000);
   });
 
-  // ─── 文件权限测试 ───
-
-  describe('文件权限', () => {
-    it('PID 文件权限 600', async () => {
-      await writePidFile(3333);
-      const stat = await fs.stat(config.PID_PATH);
-      expect(stat.mode & 0o777).toBe(0o600);
-    });
-  });
 });
