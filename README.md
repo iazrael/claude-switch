@@ -64,7 +64,7 @@ pnpm link
 安装时执行了 `pnpm link` 后，可在任意终端直接使用：
 
 ```bash
-# 无参数直接运行 → 首次运行会检测并导入现有配置，之后进入交互式切换菜单
+# 无参数直接运行 → 首次运行会检测并导入现有配置，之后显示当前 settings.json 中的环境变量
 claude-switch
 
 # 查看当前 settings.json 中的环境变量
