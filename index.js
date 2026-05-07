@@ -257,13 +257,12 @@ program
   .option('--status', '查看服务状态')
   .action(serveAction);
 
-// 无参数时默认进入切换（首次安装时先检查导入）
+// 无参数时显示当前配置
 if (process.argv.length === 2) {
   (async () => {
     try {
       await manager.init();
-      await firstInstallImport();
-      await switchProfileUI();
+      await showCurrent();
     } catch (err) {
       console.error(chalk.red('操作失败: ' + err.message));
       process.exit(1);
