@@ -48,7 +48,7 @@ tests/
 ### 运行
 
 ```bash
-npm install
+pnpm install
 # CLI 模式
 node index.js              # 无参数进入交互式切换
 node index.js list         # 列出套餐
@@ -69,10 +69,10 @@ node index.js serve status             # 查看状态
 
 ```bash
 # 运行全部测试（使用 forks pool，因为测试涉及文件系统和环境变量）
-npm test
+pnpm test
 
 # 监听模式
-npm run test:watch
+pnpm test:watch
 ```
 
 测试使用 `process.env.CLAUDE_SWITCH_DIR` 重定向数据目录到临时目录，避免污染真实数据。

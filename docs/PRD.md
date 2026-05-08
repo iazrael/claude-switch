@@ -1,6 +1,6 @@
 # Claude Switch - 产品规格说明书
 
-> 版本：3.0.0 | 最后更新：2026-05-06
+> 版本：3.0.0 | 最后更新：2026-05-08
 
 ---
 
@@ -282,7 +282,9 @@ claude-switch/
 │   ├── logger.js           # 操作日志
 │   └── serve.js            # serve 命令逻辑（PID 管理、daemon spawn、stop、status）
 ├── public/
-│   └── index.html          # Web 管理页面（单文件 SPA，420行）
+│   ├── index.html          # Web 管理页面 HTML 结构
+│   ├── styles.css          # CSS 样式（暗色模式）
+│   └── app.js              # 前端逻辑（零依赖原生 JS）
 ├── tests/
 │   └── index.test.js       # Vitest 测试用例（33个）
 ├── docs/

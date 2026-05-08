@@ -40,7 +40,9 @@ claude-switch/
 │   ├── logger.js           # 操作日志
 │   └── serve.js            # serve 命令（PID 管理、daemon、停止、状态）
 ├── public/
-│   └── index.html          # Web 管理页面（单文件 SPA）
+│   ├── index.html          # Web 管理页面 HTML 结构
+│   ├── styles.css          # CSS 样式（暗色模式）
+│   └── app.js              # 前端逻辑（零依赖原生 JS）
 ├── index.js                # CLI 入口
 ├── server.js               # Web 服务器
 └── package.json
@@ -55,7 +57,7 @@ pnpm install
 pnpm link
 ```
 
-执行后 `claude-switch` 命令可在任意目录直接使用。不再需要时执行 `npm unlink -g claude-switch` 即可移除。
+执行后 `claude-switch` 命令可在任意目录直接使用。不再需要时执行 `pnpm unlink -g claude-switch` 即可移除。
 
 ## 使用
 
