@@ -63,16 +63,15 @@ pnpm install
 tsx src/index.ts              # 无参数进入交互式切换
 tsx src/index.ts list         # 列出套餐
 tsx src/index.ts add my-pro   # 添加套餐
-tsx src/server.ts             # 直接启动 Web 服务器
 
 # 构建后运行
 pnpm build                    # 构建到 dist/
 node dist/index.js            # 运行构建后的 CLI
-node dist/server.js           # 运行构建后的 Web 服务器
 
-# serve 宠护进程模式
-tsx src/index.ts serve                    # 后台启动
+# serve 服务管理
+tsx src/index.ts serve                    # 后台启动（默认端口 3333）
 tsx src/index.ts serve --foreground       # 前台启动
+tsx src/index.ts serve -p 4444            # 指定端口
 tsx src/index.ts serve stop               # 停止服务
 tsx src/index.ts serve status             # 查看状态
 ```

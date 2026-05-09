@@ -136,7 +136,6 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 - 启动 HTTP 服务器，默认端口 3333
 - 响应式设计，支持手机浏览器访问
 - 局域网内可通过 IP 访问
-- 推荐使用 pm2 常驻后台
 
 #### F12: CLI 命令行
 - `claude-switch current` — 查看当前环境变量

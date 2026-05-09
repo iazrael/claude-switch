@@ -290,7 +290,7 @@ export async function status(): Promise<void> {
   const pidInfo = await readPidFile();
   if (!pidInfo) {
     console.log('服务未在运行');
-    console.log('提示: 通过 node server.js 或 pm2 启动的服务不受 serve 命令管理');
+    console.log('提示: 服务未通过 serve 命令启动');
     return;
   }
 

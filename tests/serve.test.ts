@@ -270,7 +270,7 @@ describe('serve 命令', () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       await serve.status();
       expect(logSpy).toHaveBeenCalledWith('服务未在运行');
-      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('node server.js'));
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('未通过 serve 命令启动'));
       logSpy.mockRestore();
     });
 

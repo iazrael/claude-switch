@@ -10,7 +10,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = parseInt(process.env.CLAUDE_SWITCH_PORT || '3333', 10);
 
 // 启动时执行一次迁移
 manager.init().catch(err => console.error('初始化迁移失败:', err.message));
@@ -193,9 +192,3 @@ app.get('/api/logs', async (req: Request, res: Response) => {
 });
 
 export default app;
-
-if (process.argv[1] === __filename) {
-  app.listen(PORT, () => {
-    console.log(`管理端已启动 → http://localhost:${PORT}`);
-  });
-}
