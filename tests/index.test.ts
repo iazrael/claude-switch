@@ -16,7 +16,7 @@ const TEST_ENV = {
 };
 
 async function cleanAll() {
-  await fs.remove(TMP_DIR);
+  await fs.rm(TMP_DIR, { recursive: true, force: true, maxRetries: 5 });
   await fs.ensureDir(path.join(TMP_DIR, 'profiles.d'));
 }
 
@@ -24,8 +24,8 @@ async function cleanAll() {
 process.env.CLAUDE_SWITCH_DIR = TMP_DIR;
 process.env.CLAUDE_SETTINGS_PATH = TMP_SETTINGS;
 
-const manager = await import('../lib/profile-manager');
-const app = (await import('../server')).default;
+const manager = await import('../lib/profile-manager.js');
+const { default: app } = await import('../server.js');
 
 // Path constants matching the config with env override
 const PROFILES_PATH = path.join(TMP_DIR, 'profiles.json');
@@ -35,7 +35,7 @@ const SETTINGS_PATH = TMP_SETTINGS;
 
 describe('Profile Manager', () => {
   beforeEach(cleanAll);
-  afterEach(async () => { await fs.remove(TMP_DIR); });
+  afterEach(async () => { await fs.rm(TMP_DIR, { recursive: true, force: true, maxRetries: 5 }); });
 
   it('应该能添加套餐', async () => {
     await manager.addProfile('test-profile', TEST_ENV);
@@ -243,7 +243,7 @@ describe('Profile Manager', () => {
 
 describe('Crypto Utils', () => {
   it('加密后能正确解密', async () => {
-    const { encrypt, decrypt } = await import('../lib/crypto-utils');
+    const { encrypt, decrypt } = await import('../lib/crypto-utils.js');
     const original = 'my-secret-key-12345';
     const encrypted = encrypt(original);
     expect(encrypted).not.toBe(original);
@@ -253,25 +253,25 @@ describe('Crypto Utils', () => {
   });
 
   it('解密非加密格式返回原值', async () => {
-    const { decrypt } = await import('../lib/crypto-utils');
+    const { decrypt } = await import('../lib/crypto-utils.js');
     expect(decrypt('not-encrypted-value')).toBe('not-encrypted-value');
   });
 
   it('每次加密结果不同（随机 IV）', async () => {
-    const { encrypt } = await import('../lib/crypto-utils');
+    const { encrypt } = await import('../lib/crypto-utils.js');
     const enc1 = encrypt('same-value');
     const enc2 = encrypt('same-value');
     expect(enc1).not.toBe(enc2);
   });
 
   it('needsReEncrypt 对新密钥加密的数据返回 false', async () => {
-    const { encrypt, needsReEncrypt } = await import('../lib/crypto-utils');
+    const { encrypt, needsReEncrypt } = await import('../lib/crypto-utils.js');
     const encrypted = encrypt('test-data');
     expect(needsReEncrypt(encrypted)).toBe(false);
   });
 
   it('needsReEncrypt 对非加密数据返回 false', async () => {
-    const { needsReEncrypt } = await import('../lib/crypto-utils');
+    const { needsReEncrypt } = await import('../lib/crypto-utils.js');
     expect(needsReEncrypt('plaintext')).toBe(false);
   });
 });
@@ -279,9 +279,9 @@ describe('Crypto Utils', () => {
 // ========== Diff Utils Tests ==========
 
 describe('Diff Utils', () => {
-  let diffJSON;
+  let diffJSON: any;
   beforeEach(async () => {
-    const mod = await import('../lib/diff');
+    const mod = await import('../lib/diff.js');
     diffJSON = mod.diffJSON;
   });
 
@@ -358,7 +358,7 @@ describe('Preset Templates', () => {
 
   it('每个模板应包含必要字段', () => {
     const templates = manager.getPresetTemplates();
-    for (const [, t] of Object.entries(templates)) {
+    for (const [, t] of Object.entries(templates) as [string, any][]) {
       expect(t).toHaveProperty('label');
       expect(t).toHaveProperty('baseUrl');
       expect(t).toHaveProperty('opus');
@@ -373,7 +373,7 @@ describe('Preset Templates', () => {
 
 describe('API Endpoints', () => {
   beforeEach(cleanAll);
-  afterEach(async () => { await fs.remove(TMP_DIR); });
+  afterEach(async () => { await fs.rm(TMP_DIR, { recursive: true, force: true, maxRetries: 5 }); });
 
   describe('GET /api/profiles', () => {
     it('应该返回空的套餐列表（新格式）', async () => {

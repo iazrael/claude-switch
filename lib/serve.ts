@@ -1,18 +1,24 @@
-const fs = require('fs-extra');
+import fs from 'fs-extra';
+import path from 'path';
+import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
+import { Server } from 'http';
+import { PID_PATH, SERVER_LOG_PATH } from './config.js';
+import { PidInfo } from './types.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // 跟踪当前注册的信号处理器，用于测试清理
-const _activeSignalHandlers = [];
-const path = require('path');
-const { spawn } = require('child_process');
-const { PID_PATH, SERVER_LOG_PATH } = require('./config');
+const _activeSignalHandlers: Array<[string, (...args: any[]) => void]> = [];
 
 // ─── 内部工具函数 ───
 
-function resolvePort(portStr) {
-  let port;
-  let source;
+function resolvePort(portStr?: string | number): number {
+  let port: number;
+  let source: string | number;
   if (portStr) {
-    port = parseInt(portStr, 10);
+    port = typeof portStr === 'number' ? portStr : parseInt(portStr, 10);
     source = portStr;
   } else if (process.env.CLAUDE_SWITCH_PORT) {
     port = parseInt(process.env.CLAUDE_SWITCH_PORT, 10);
@@ -27,7 +33,7 @@ function resolvePort(portStr) {
   return port;
 }
 
-function isAlive(pid) {
+function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
@@ -36,11 +42,11 @@ function isAlive(pid) {
   }
 }
 
-function sleep(ms) {
+function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function formatUptime(ms) {
+function formatUptime(ms: number): string {
   const seconds = Math.floor(ms / 1000);
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);
@@ -57,7 +63,7 @@ function formatUptime(ms) {
 
 // ─── PID 管理 ───
 
-async function readPidFile() {
+async function readPidFile(): Promise<PidInfo | null> {
   try {
     const content = await fs.readFile(PID_PATH, 'utf8');
     const data = JSON.parse(content);
@@ -67,15 +73,15 @@ async function readPidFile() {
       return null;
     }
     return data;
-  } catch (err) {
-    if (err.code === 'ENOENT') return null;
-    console.error(`警告: PID 文件损坏，已忽略 (${err.message})`);
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    console.error(`警告: PID 文件损坏，已忽略 (${(err as Error).message})`);
     return null;
   }
 }
 
-async function writePidFile(port) {
-  const data = {
+async function writePidFile(port: number): Promise<void> {
+  const data: PidInfo = {
     pid: process.pid,
     port,
     startedAt: new Date().toISOString(),
@@ -84,15 +90,15 @@ async function writePidFile(port) {
   await fs.chmod(PID_PATH, 0o600);
 }
 
-async function cleanupPid() {
+async function cleanupPid(): Promise<void> {
   try {
     await fs.remove(PID_PATH);
-  } catch (err) {
-    if (err.code !== 'ENOENT') throw err;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
   }
 }
 
-async function ensureNotRunning() {
+async function ensureNotRunning(): Promise<void> {
   const pidInfo = await readPidFile();
   if (!pidInfo) return;
   if (isAlive(pidInfo.pid)) {
@@ -103,7 +109,7 @@ async function ensureNotRunning() {
   await cleanupPid();
 }
 
-async function waitForPidFile(timeoutMs) {
+async function waitForPidFile(timeoutMs: number): Promise<PidInfo | null> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const pidInfo = await readPidFile();
@@ -113,7 +119,7 @@ async function waitForPidFile(timeoutMs) {
   return null;
 }
 
-async function waitForExit(pid, timeout, interval) {
+async function waitForExit(pid: number, timeout: number, interval: number): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < timeout) {
     if (!isAlive(pid)) return true;
@@ -124,24 +130,24 @@ async function waitForExit(pid, timeout, interval) {
 
 // ─── 日志轮转 ───
 
-async function rotateLogIfNeeded(maxBytes) {
+async function rotateLogIfNeeded(maxBytes: number): Promise<void> {
   try {
     const stat = await fs.stat(SERVER_LOG_PATH);
     if (stat.size >= maxBytes) {
       const backupPath = SERVER_LOG_PATH + '.old';
       await fs.move(SERVER_LOG_PATH, backupPath, { overwrite: true });
     }
-  } catch (err) {
-    if (err.code !== 'ENOENT') throw err;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
     // 文件不存在，无需处理
   }
 }
 
 // ─── 优雅关闭辅助 ───
 
-function registerShutdown(server) {
+function registerShutdown(server: Server): void {
   let shuttingDown = false;
-  const shutdown = async (signal) => {
+  const shutdown = async (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
     server.close();
@@ -158,7 +164,7 @@ function registerShutdown(server) {
 
 // ─── 导出函数 ───
 
-async function startForeground(port) {
+export async function startForeground(port: number): Promise<void> {
   // 1. 防重复启动
   await ensureNotRunning();
 
@@ -167,7 +173,7 @@ async function startForeground(port) {
 
   // 3. 启动 Express（复用 server.js 导出的 app）
   // server.js 顶层 manager.init() 在 require 时已执行（模块缓存），不重复调用
-  const app = require('../server');
+  const { default: app } = await import('../server.js');
   const server = app.listen(port, async () => {
     // PID 写入必须在 listen 成功回调内
     await writePidFile(port);
@@ -175,10 +181,11 @@ async function startForeground(port) {
   });
 
   // listen 失败时 PID 尚未写入，无需清理
-  server.on('error', (err) => {
-    console.error(err.code === 'EADDRINUSE'
+  server.on('error', (err: unknown) => {
+    const code = (err as NodeJS.ErrnoException).code;
+    console.error(code === 'EADDRINUSE'
       ? `端口 ${port} 已被占用`
-      : `启动失败: ${err.message}`);
+      : `启动失败: ${(err as Error).message}`);
     process.exit(1);
   });
 
@@ -186,7 +193,7 @@ async function startForeground(port) {
   registerShutdown(server);
 }
 
-async function startDaemon(port) {
+export async function startDaemon(port: number): Promise<void> {
   // 1. 防重复启动
   await ensureNotRunning();
 
@@ -201,9 +208,14 @@ async function startDaemon(port) {
   fs.fchmodSync(logFd, 0o600);
 
   // 5. spawn 子进程
+  const isTs = __filename.endsWith('.ts');
+  const execArgs = isTs 
+    ? ['--import', 'tsx', __filename, '--daemon-child', String(port)]
+    : [process.argv[1], 'serve', '--daemon-child', String(port)];
+
   const child = spawn(
     process.execPath,
-    [path.resolve(__dirname, 'serve.js'), '--daemon-child', String(port)],
+    execArgs,
     {
       detached: true,
       stdio: ['ignore', logFd, logFd],
@@ -211,22 +223,23 @@ async function startDaemon(port) {
     }
   );
 
-  // 6. 父进程关闭自身的 fd 副本（子进程通过 spawn stdio 继承了独立的 fd 副本，
-  //    不受父进程 closeSync 影响。spawn 返回时子进程已完成 fd 继承/dup2，
-  //    因此此时 closeSync 是安全的）
+  // 6. 父进程关闭自身的 fd 副本
   child.unref();
   fs.closeSync(logFd);
 
   const pidInfo = await waitForPidFile(10000);
   if (!pidInfo) {
     console.error('错误: 后台进程启动失败，请检查日志:', SERVER_LOG_PATH);
+    if (fs.existsSync(SERVER_LOG_PATH)) {
+      console.error(fs.readFileSync(SERVER_LOG_PATH, 'utf8'));
+    }
     process.exit(1);
   }
 
   console.log(`管理端已后台启动 → PID: ${pidInfo.pid}, http://localhost:${port}, 日志: ${SERVER_LOG_PATH}`);
 }
 
-async function stop() {
+export async function stop(): Promise<void> {
   const pidInfo = await readPidFile();
   if (!pidInfo) {
     console.log('服务未在运行');
@@ -245,8 +258,8 @@ async function stop() {
   // 2. 发送 SIGTERM
   try {
     process.kill(pid, 'SIGTERM');
-  } catch (err) {
-    if (err.code === 'ESRCH') {
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'ESRCH') {
       await cleanupPid();
       console.log('进程已退出，已清理 PID 文件');
       return;
@@ -273,7 +286,7 @@ async function stop() {
   console.log(`服务已停止，PID: ${pid}`);
 }
 
-async function status() {
+export async function status(): Promise<void> {
   const pidInfo = await readPidFile();
   if (!pidInfo) {
     console.log('服务未在运行');
@@ -305,10 +318,10 @@ async function status() {
 
 // ─── daemon 子进程入口 ───
 
-async function daemonChildMain(port) {
+export async function daemonChildMain(port: number): Promise<void> {
   // require('../server') 触发 server.js 顶层代码执行
   // 其中包含 manager.init()，由于是首次 require 此模块，init 会执行
-  const app = require('../server');
+  const { default: app } = await import('../server.js');
 
   const server = app.listen(port, async () => {
     // 仅在 listen 成功后写入 PID
@@ -316,10 +329,11 @@ async function daemonChildMain(port) {
   });
 
   // listen 失败 → 退出，PID 未写入
-  server.on('error', (err) => {
-    console.error(err.code === 'EADDRINUSE'
+  server.on('error', (err: unknown) => {
+    const code = (err as NodeJS.ErrnoException).code;
+    console.error(code === 'EADDRINUSE'
       ? `端口 ${port} 已被占用`
-      : `启动失败: ${err.message}`);
+      : `启动失败: ${(err as Error).message}`);
     process.exit(1);
   });
 
@@ -327,8 +341,10 @@ async function daemonChildMain(port) {
   registerShutdown(server);
 }
 
-// 底部自执行检测
-if (require.main === module) {
+// Node ESM 的入口检测 - 在 TS 环境测试时需要
+import { fileURLToPath as _fileURLToPath } from 'url';
+const _filename = _fileURLToPath(import.meta.url);
+if (process.argv[1] === _filename) {
   const args = process.argv.slice(2);
   if (args[0] === '--daemon-child') {
     const port = parseInt(args[1] || process.env.CLAUDE_SWITCH_PORT || '3333', 10);
@@ -339,29 +355,22 @@ if (require.main === module) {
   }
 }
 
-module.exports = {
-  startForeground,
-  startDaemon,
-  stop,
-  status,
-  // 导出内部函数供测试使用
-  _internal: {
-    readPidFile,
-    writePidFile,
-    cleanupPid,
-    ensureNotRunning,
-    isAlive,
-    resolvePort,
-    formatUptime,
-    rotateLogIfNeeded,
-    waitForPidFile,
-    waitForExit,
-    _activeSignalHandlers,
-    cleanupSignalHandlers() {
-      for (const [signal, handler] of _activeSignalHandlers) {
-        process.removeListener(signal, handler);
-      }
-      _activeSignalHandlers.length = 0;
-    },
+export const _internal = {
+  readPidFile,
+  writePidFile,
+  cleanupPid,
+  ensureNotRunning,
+  isAlive,
+  resolvePort,
+  formatUptime,
+  rotateLogIfNeeded,
+  waitForPidFile,
+  waitForExit,
+  _activeSignalHandlers,
+  cleanupSignalHandlers() {
+    for (const [signal, handler] of _activeSignalHandlers) {
+      process.removeListener(signal, handler);
+    }
+    _activeSignalHandlers.length = 0;
   },
 };

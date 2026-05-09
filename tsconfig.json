@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "./dist",
+    "rootDir": "./",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": [
+    "lib/**/*",
+    "index.ts",
+    "server.ts",
+    "tests/**/*",
+    "vitest.config.ts",
+    "tsup.config.ts",
+    "env.d.ts"
+  ]
+}
