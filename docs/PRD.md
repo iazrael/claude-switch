@@ -1,6 +1,6 @@
 # Claude Switch - 产品规格说明书
 
-> 版本：3.0.0 | 最后更新：2026-05-08
+> 版本：3.1.0 | 最后更新：2026-05-09
 
 ---
 
@@ -274,26 +274,32 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 ```
 claude-switch/
 ├── lib/
-│   ├── config.js           # 路径常量，支持 CLAUDE_SWITCH_DIR 环境变量覆盖
-│   ├── crypto-utils.js     # AES-256-CBC 加解密
-│   ├── profile-manager.js  # 核心业务逻辑（CRUD、切换、预设模板）
-│   ├── backup.js           # 备份还原管理
-│   ├── diff.js             # JSON diff 工具
-│   ├── logger.js           # 操作日志
-│   └── serve.js            # serve 命令逻辑（PID 管理、daemon spawn、stop、status）
+│   ├── config.ts           # 路径常量，支持环境变量覆盖
+│   ├── crypto-utils.ts     # AES-256-CBC 加解密
+│   ├── profile-manager.ts  # 核心业务逻辑（CRUD、切换、预设模板）
+│   ├── backup.ts           # 备份还原管理
+│   ├── diff.ts             # JSON diff 工具
+│   ├── logger.ts           # 操作日志
+│   ├── serve.ts            # serve 命令逻辑
+│   └── types.ts            # TypeScript 类型定义
 ├── public/
-│   ├── index.html          # Web 管理页面 HTML 结构
+│   ├── index.html          # Web 管理页面
 │   ├── styles.css          # CSS 样式（暗色模式）
-│   └── app.js              # 前端逻辑（零依赖原生 JS）
+│   └── app.js              # 前端逻辑（原生 JS）
 ├── tests/
-│   └── index.test.js       # Vitest 测试用例（33个）
+│   ├── index.test.ts       # 集成测试
+│   └── serve.test.ts       # serve 命令测试
 ├── docs/
-│   └── SPEC.md             # 本文档
-├── index.js                # CLI 入口（Commander.js）
-├── server.js               # Express Web 服务器
+│   └── PRD.md              # 本文档
+├── index.ts                # CLI 入口
+├── server.ts               # Express Web 服务器
+├── tsconfig.json           # TypeScript 配置
+├── tsup.config.ts          # 构建配置
+├── env.d.ts                # 环境变量类型声明
 ├── package.json
-├── README.md
-└── vitest.config.js
+├── README.md               # 用户指南
+├── CLAUDE.md               # 开发指南
+└── vitest.config.ts
 ```
 
 ### 4.3 依赖项
@@ -302,10 +308,21 @@ claude-switch/
 |---|---|---|
 | express | ^4.21 | HTTP 服务器 |
 | cors | ^2.8 | 跨域支持 |
-| fs-extra | ^11.2 | 文件系统操作（Promise 化） |
+| fs-extra | ^11.2 | 文件系统操作 |
 | commander | ^11.1 | CLI 命令解析 |
 | inquirer | ^8.2 | CLI 交互式提示 |
-| chalk | ^4.1 | CLI 彩色输出 |
+| chalk | ^5.6 | CLI 彩色输出 |
+| proper-lockfile | ^4.1 | 文件锁（并发保护） |
+
+### 4.4 开发依赖
+
+| 包名 | 版本 | 用途 |
+|---|---|---|
+| typescript | ^6.0 | TypeScript 编译器 |
+| tsup | ^8.5 | TypeScript 构建工具 |
+| tsx | ^4.21 | TypeScript 执行器 |
+| vitest | ^4.1 | 测试框架 |
+| supertest | ^7.2 | API 测试 |
 
 ### 4.4 数据存储
 
@@ -417,7 +434,7 @@ Claude Code 配置文件：`~/.claude/settings.json`
 
 ### 6.1 系统要求
 
-- Node.js >= 18
+- Node.js >= 24（支持 ESM + TypeScript）
 - macOS / Linux（Windows 理论上可用但未测试）
 - Claude Code 已安装
 
@@ -427,7 +444,8 @@ Claude Code 配置文件：`~/.claude/settings.json`
 git clone https://github.com/iazrael/claude-switch.git
 cd claude-switch
 pnpm install
-pnpm link
+pnpm build      # 构建 TypeScript
+pnpm link       # 全局安装命令
 ```
 
 ### 6.3 启动方式
@@ -440,9 +458,9 @@ claude-switch serve -d -p 8080       # 后台 + 指定端口
 claude-switch serve --stop           # 停止
 claude-switch serve --status         # 查看状态
 
-# 兼容旧方式
-node server.js                       # 直接启动
-pm2 start server.js --name claude-switch  # pm2 守护
+# 直接启动（开发模式）
+node dist/server.js                  # 构建后运行
+tsx server.ts                        # 开发时运行
 ```
 
 ### 6.4 环境变量
