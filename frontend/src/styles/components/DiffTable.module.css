@@ -1,0 +1,23 @@
+.diffTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  font-family: monospace;
+}
+
+.diffTable th {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 2px solid var(--border);
+  color: var(--sub);
+}
+
+.diffTable td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  word-break: break-all;
+}
+
+.diffRowChanged {
+  background: rgba(234, 179, 8, 0.1);
+}

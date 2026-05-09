@@ -1,9 +1,9 @@
-const fs = require('fs-extra');
-const path = require('path');
-const { SETTINGS_PATH, PROFILES_PATH, BACKUP_DIR } = require('./config');
+import fs from 'fs-extra';
+import path from 'path';
+import { SETTINGS_PATH, PROFILES_PATH, BACKUP_DIR } from './config.js';
 
 // 生成带时间戳和原因的备份文件名
-function getBackupFileName(originalPath, reason) {
+function getBackupFileName(originalPath: string, reason?: string | null): string {
   const name = path.basename(originalPath, '.json');
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
   if (reason) {
@@ -13,7 +13,7 @@ function getBackupFileName(originalPath, reason) {
 }
 
 // 清理旧备份文件，只保留最新的 maxCount 个
-async function cleanOldFiles(dir, maxCount) {
+async function cleanOldFiles(dir: string, maxCount: number): Promise<void> {
   if (!(await fs.pathExists(dir))) return;
   const files = await fs.readdir(dir);
   if (files.length <= maxCount) return;
@@ -29,12 +29,14 @@ async function cleanOldFiles(dir, maxCount) {
   for (const f of toDelete) {
     try {
       await fs.remove(path.join(dir, f.name));
-    } catch (_) {}
+    } catch {
+      // 文件删除失败（权限或不存在），不影响主流程
+    }
   }
 }
 
 // 备份一个文件
-async function backupFile(filePath, reason) {
+export async function backupFile(filePath: string, reason?: string | null): Promise<string | null> {
   await fs.ensureDir(BACKUP_DIR);
   if (await fs.pathExists(filePath)) {
     const backupName = getBackupFileName(filePath, reason);
@@ -46,8 +48,10 @@ async function backupFile(filePath, reason) {
   return null;
 }
 
+export type BackupType = 'settings' | 'profiles';
+
 // 校验 type 白名单
-function validateType(type) {
+export function validateType(type: string): asserts type is BackupType {
   const allowed = ['settings', 'profiles'];
   if (!allowed.includes(type)) {
     throw new Error(`无效的备份类型: ${type}，仅允许: ${allowed.join(', ')}`);
@@ -55,14 +59,14 @@ function validateType(type) {
 }
 
 // 校验备份文件名安全性
-function validateBackupFileName(backupFileName) {
+export function validateBackupFileName(backupFileName: string): void {
   if (!backupFileName || backupFileName.includes('..') || backupFileName.includes('/') || backupFileName.includes('\\')) {
     throw new Error('无效的备份文件名');
   }
 }
 
 // 还原：从指定备份恢复 settings 或 profiles
-async function restoreFile(type, backupFileName) {
+export async function restoreFile(type: string, backupFileName: string): Promise<void> {
   validateType(type);
   validateBackupFileName(backupFileName);
   const targetPath = type === 'settings' ? SETTINGS_PATH : PROFILES_PATH;
@@ -79,8 +83,14 @@ async function restoreFile(type, backupFileName) {
   await fs.copy(resolvedBackup, targetPath);
 }
 
+export interface BackupInfo {
+  fileName: string;
+  timestamp: string | null;
+  reason: string | null;
+}
+
 // 解析备份文件名中的时间戳和原因
-function parseBackupFileName(fileName) {
+export function parseBackupFileName(fileName: string): BackupInfo {
   const match = fileName.match(/^\w+-(\d{4}-\d{2}-\d{2}T[\d-]+[A-Z]?)(?:_(.+))?\.json$/);
   if (!match) return { fileName, timestamp: null, reason: null };
   return {
@@ -91,7 +101,7 @@ function parseBackupFileName(fileName) {
 }
 
 // 列出所有备份（按文件类型筛选），返回对象数组
-async function listBackups(type) {
+export async function listBackups(type: string): Promise<BackupInfo[]> {
   validateType(type);
   await fs.ensureDir(BACKUP_DIR);
   const files = await fs.readdir(BACKUP_DIR);
@@ -101,5 +111,3 @@ async function listBackups(type) {
     .reverse()
     .map(f => parseBackupFileName(f));
 }
-
-module.exports = { backupFile, restoreFile, listBackups, validateType, validateBackupFileName };

@@ -1,4 +1,3 @@
-// NOTE: 测试文件使用 ESM 语法，与 tests/index.test.js 保持一致。Vitest 原生支持 ESM。
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs-extra';
 import path from 'path';
@@ -9,15 +8,12 @@ import net from 'net';
 // 临时目录
 const TMP_DIR = path.join(os.tmpdir(), 'claude-switch-serve-test-' + process.pid);
 
-// 覆盖 config 路径 — 必须在 require config 之前
+// 覆盖 config 路径 — 必须在引入模块之前设置
 process.env.CLAUDE_SWITCH_DIR = TMP_DIR;
 
-// 用 createRequire 加载 CJS 模块
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
+const config = await import('../src/lib/config.js');
+const serve = await import('../src/lib/serve.js');
 
-const config = require('../lib/config');
-const serve = require('../lib/serve');
 const { readPidFile, writePidFile, cleanupPid, ensureNotRunning, isAlive, resolvePort, formatUptime, rotateLogIfNeeded, waitForExit, _activeSignalHandlers, cleanupSignalHandlers } = serve._internal;
 
 describe('serve 命令', () => {
@@ -28,7 +24,7 @@ describe('serve 命令', () => {
   });
 
   afterEach(async () => {
-    await fs.remove(TMP_DIR).catch(() => {});
+    await fs.rm(TMP_DIR, { recursive: true, force: true, maxRetries: 5 }).catch(() => {});
   });
 
   // ─── 6.1 PID 管理单元测试 ───
@@ -128,7 +124,7 @@ describe('serve 命令', () => {
     });
 
     it('resolvePort: 非数字端口报错', () => {
-      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code: any) => {
         throw new Error(`process.exit(${code})`);
       });
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -139,7 +135,7 @@ describe('serve 命令', () => {
     });
 
     it('resolvePort: 超范围端口报错', () => {
-      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code: any) => {
         throw new Error(`process.exit(${code})`);
       });
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -190,18 +186,18 @@ describe('serve 命令', () => {
       const port = 18000 + Math.floor(Math.random() * 1000);
 
       // mock process.exit 防止测试进程退出
-      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code: any) => { return code as never; });
 
       serve.startForeground(port);
 
       // 等待 PID 文件出现
       const pidInfo = await serve._internal.waitForPidFile(3000);
       expect(pidInfo).not.toBeNull();
-      expect(pidInfo.port).toBe(port);
-      expect(isAlive(pidInfo.pid)).toBe(true);
+      expect(pidInfo!.port).toBe(port);
+      expect(isAlive(pidInfo!.pid)).toBe(true);
 
       // 验证 HTTP 可访问
-      await new Promise((resolve, reject) => {
+      await new Promise<void>((resolve, reject) => {
         http.get(`http://localhost:${port}/api/presets`, (res) => {
           expect(res.statusCode).toBe(200);
           resolve();
@@ -223,7 +219,7 @@ describe('serve 命令', () => {
       const blocker = net.createServer().listen(port);
       await new Promise(resolve => blocker.once('listening', resolve));
 
-      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code: any) => { return code as never; });
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       serve.startForeground(port);
@@ -246,7 +242,7 @@ describe('serve 命令', () => {
 
   describe('stop', () => {
     it('停止不存在的服务时报错退出', async () => {
-      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code: any) => {
         throw new Error(`process.exit(${code})`);
       });
       await expect(serve.stop()).rejects.toThrow(/process\.exit/);
@@ -274,7 +270,7 @@ describe('serve 命令', () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       await serve.status();
       expect(logSpy).toHaveBeenCalledWith('服务未在运行');
-      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('node server.js'));
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('未通过 serve 命令启动'));
       logSpy.mockRestore();
     });
 
@@ -303,15 +299,15 @@ describe('serve 命令', () => {
       // 验证 PID 文件存在且内容正确
       const pidInfo = await readPidFile();
       expect(pidInfo).not.toBeNull();
-      expect(pidInfo.port).toBe(port);
-      expect(typeof pidInfo.pid).toBe('number');
-      expect(pidInfo.startedAt).toBeDefined();
+      expect(pidInfo!.port).toBe(port);
+      expect(typeof pidInfo!.pid).toBe('number');
+      expect(pidInfo!.startedAt).toBeDefined();
 
       // 验证进程存活
-      expect(isAlive(pidInfo.pid)).toBe(true);
+      expect(isAlive(pidInfo!.pid)).toBe(true);
 
       // 验证 HTTP 可访问
-      await new Promise((resolve, reject) => {
+      await new Promise<void>((resolve, reject) => {
         http.get(`http://localhost:${port}/api/presets`, (res) => {
           expect(res.statusCode).toBe(200);
           resolve();

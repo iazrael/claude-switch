@@ -3,3 +3,8 @@ node_modules/
 *.log
 .env
 .vscode/
+dist/
+*.tsbuildinfo
+frontend/vite.config.d.ts
+frontend/vite.config.js
+docs/superpowers
