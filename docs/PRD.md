@@ -273,33 +273,34 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 
 ```
 claude-switch/
-├── lib/
-│   ├── config.ts           # 路径常量，支持环境变量覆盖
-│   ├── crypto-utils.ts     # AES-256-CBC 加解密
-│   ├── profile-manager.ts  # 核心业务逻辑（CRUD、切换、预设模板）
-│   ├── backup.ts           # 备份还原管理
-│   ├── diff.ts             # JSON diff 工具
-│   ├── logger.ts           # 操作日志
-│   ├── serve.ts            # serve 命令逻辑
-│   └── types.ts            # TypeScript 类型定义
+├── src/
+│   ├── lib/
+│   │   ├── config.ts           # 路径常量，支持环境变量覆盖
+│   │   ├── crypto-utils.ts     # AES-256-CBC 加解密
+│   │   ├── profile-manager.ts  # 核心业务逻辑（CRUD、切换、预设模板）
+│   │   ├── backup.ts           # 备份还原管理
+│   │   ├── diff.ts             # JSON diff 工具
+│   │   ├── logger.ts           # 操作日志
+│   │   ├── serve.ts            # serve 命令逻辑
+│   │   └── types.ts            # TypeScript 类型定义
+│   ├── index.ts                # CLI 入口
+│   ├── server.ts               # Express Web 服务器
+│   └── env.d.ts                # 环境变量类型声明
 ├── public/
-│   ├── index.html          # Web 管理页面
-│   ├── styles.css          # CSS 样式（暗色模式）
-│   └── app.js              # 前端逻辑（原生 JS）
+│   ├── index.html              # Web 管理页面
+│   ├── styles.css              # CSS 样式（暗色模式）
+│   └── app.js                  # 前端逻辑（原生 JS）
 ├── tests/
-│   ├── index.test.ts       # 集成测试
-│   └── serve.test.ts       # serve 命令测试
+│   ├── index.test.ts           # 集成测试
+│   └── serve.test.ts           # serve 命令测试
 ├── docs/
-│   └── PRD.md              # 本文档
-├── index.ts                # CLI 入口
-├── server.ts               # Express Web 服务器
-├── tsconfig.json           # TypeScript 配置
-├── tsup.config.ts          # 构建配置
-├── env.d.ts                # 环境变量类型声明
+│   └── PRD.md                  # 本文档
+├── tsconfig.json               # TypeScript 配置
+├── tsup.config.ts              # 构建配置
+├── vitest.config.ts            # 测试配置
 ├── package.json
-├── README.md               # 用户指南
-├── CLAUDE.md               # 开发指南
-└── vitest.config.ts
+├── README.md                   # 用户指南
+└── CLAUDE.md                   # 开发指南
 ```
 
 ### 4.3 依赖项

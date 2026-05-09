@@ -24,8 +24,8 @@ async function cleanAll() {
 process.env.CLAUDE_SWITCH_DIR = TMP_DIR;
 process.env.CLAUDE_SETTINGS_PATH = TMP_SETTINGS;
 
-const manager = await import('../lib/profile-manager.js');
-const { default: app } = await import('../server.js');
+const manager = await import('../src/lib/profile-manager.js');
+const { default: app } = await import('../src/server.js');
 
 // Path constants matching the config with env override
 const PROFILES_PATH = path.join(TMP_DIR, 'profiles.json');
@@ -243,7 +243,7 @@ describe('Profile Manager', () => {
 
 describe('Crypto Utils', () => {
   it('加密后能正确解密', async () => {
-    const { encrypt, decrypt } = await import('../lib/crypto-utils.js');
+    const { encrypt, decrypt } = await import('../src/lib/crypto-utils.js');
     const original = 'my-secret-key-12345';
     const encrypted = encrypt(original);
     expect(encrypted).not.toBe(original);
@@ -253,25 +253,25 @@ describe('Crypto Utils', () => {
   });
 
   it('解密非加密格式返回原值', async () => {
-    const { decrypt } = await import('../lib/crypto-utils.js');
+    const { decrypt } = await import('../src/lib/crypto-utils.js');
     expect(decrypt('not-encrypted-value')).toBe('not-encrypted-value');
   });
 
   it('每次加密结果不同（随机 IV）', async () => {
-    const { encrypt } = await import('../lib/crypto-utils.js');
+    const { encrypt } = await import('../src/lib/crypto-utils.js');
     const enc1 = encrypt('same-value');
     const enc2 = encrypt('same-value');
     expect(enc1).not.toBe(enc2);
   });
 
   it('needsReEncrypt 对新密钥加密的数据返回 false', async () => {
-    const { encrypt, needsReEncrypt } = await import('../lib/crypto-utils.js');
+    const { encrypt, needsReEncrypt } = await import('../src/lib/crypto-utils.js');
     const encrypted = encrypt('test-data');
     expect(needsReEncrypt(encrypted)).toBe(false);
   });
 
   it('needsReEncrypt 对非加密数据返回 false', async () => {
-    const { needsReEncrypt } = await import('../lib/crypto-utils.js');
+    const { needsReEncrypt } = await import('../src/lib/crypto-utils.js');
     expect(needsReEncrypt('plaintext')).toBe(false);
   });
 });
@@ -281,7 +281,7 @@ describe('Crypto Utils', () => {
 describe('Diff Utils', () => {
   let diffJSON: any;
   beforeEach(async () => {
-    const mod = await import('../lib/diff.js');
+    const mod = await import('../src/lib/diff.js');
     diffJSON = mod.diffJSON;
   });
 

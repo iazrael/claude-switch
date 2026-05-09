@@ -11,8 +11,8 @@ const TMP_DIR = path.join(os.tmpdir(), 'claude-switch-serve-test-' + process.pid
 // 覆盖 config 路径 — 必须在引入模块之前设置
 process.env.CLAUDE_SWITCH_DIR = TMP_DIR;
 
-const config = await import('../lib/config.js');
-const serve = await import('../lib/serve.js');
+const config = await import('../src/lib/config.js');
+const serve = await import('../src/lib/serve.js');
 
 const { readPidFile, writePidFile, cleanupPid, ensureNotRunning, isAlive, resolvePort, formatUptime, rotateLogIfNeeded, waitForExit, _activeSignalHandlers, cleanupSignalHandlers } = serve._internal;
 

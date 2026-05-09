@@ -28,20 +28,29 @@ Claude Code 使用三级模型分工：
 
 ```
 claude-switch/
-├── lib/
-│   ├── config.js           # 路径常量
-│   ├── crypto-utils.js     # AES-256-CBC 加解密
-│   ├── profile-manager.js  # 核心业务逻辑
-│   ├── backup.js           # 备份还原
-│   ├── diff.js             # JSON diff 工具
-│   ├── logger.js           # 操作日志
-│   └── serve.js            # serve 命令（PID 管理、daemon、停止、状态）
+├── src/
+│   ├── lib/
+│   │   ├── config.ts           # 路径常量
+│   │   ├── crypto-utils.ts     # AES-256-CBC 加解密
+│   │   ├── profile-manager.ts  # 核心业务逻辑
+│   │   ├── backup.ts           # 备份还原
+│   │   ├── diff.ts             # JSON diff 工具
+│   │   ├── logger.ts           # 操作日志
+│   │   ├── serve.ts            # serve 命令（PID 管理、daemon、停止、状态）
+│   │   └── types.ts            # TypeScript 类型定义
+│   ├── index.ts                # CLI 入口
+│   ├── server.ts               # Web 服务器
+│   └── env.d.ts                # 环境变量类型声明
 ├── public/
-│   ├── index.html          # Web 管理页面 HTML 结构
-│   ├── styles.css          # CSS 样式（暗色模式）
-│   └── app.js              # 前端逻辑（零依赖原生 JS）
-├── index.js                # CLI 入口
-├── server.js               # Web 服务器
+│   ├── index.html              # Web 管理页面 HTML 结构
+│   ├── styles.css              # CSS 样式（暗色模式）
+│   └── app.js                  # 前端逻辑（零依赖原生 JS）
+├── tests/
+│   ├── index.test.ts           # 集成测试
+│   └── serve.test.ts           # serve 命令测试
+├── tsconfig.json               # TypeScript 配置
+├── tsup.config.ts              # 构建配置
+├── vitest.config.ts            # 测试配置
 └── package.json
 ```
 

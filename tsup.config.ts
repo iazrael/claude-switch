@@ -2,7 +2,7 @@ import { defineConfig } from 'tsup';
 import fs from 'fs-extra';
 
 export default defineConfig({
-  entry: ['index.ts', 'server.ts'],
+  entry: ['src/index.ts', 'src/server.ts'],
   format: ['esm'],
   target: 'node24',
   clean: true,
