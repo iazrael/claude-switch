@@ -1,0 +1,45 @@
+.profileItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profileInfo {
+  flex: 1;
+  min-width: 150px;
+}
+
+.profileName {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.profileMeta {
+  font-size: 0.8rem;
+  color: var(--sub);
+  word-break: break-all;
+}
+
+.currentBadge {
+  background: var(--success);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  margin-left: 8px;
+}
+
+.mismatchBadge {
+  background: var(--warning);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  margin-left: 4px;
+}

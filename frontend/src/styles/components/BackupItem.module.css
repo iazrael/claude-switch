@@ -1,0 +1,32 @@
+.backupItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.backupItem:lastChild {
+  border-bottom: none;
+}
+
+.backupReason {
+  font-size: 0.75rem;
+  color: var(--accent);
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.backupLeft {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.backupButtons {
+  display: flex;
+  gap: 4px;
+}
