@@ -248,6 +248,7 @@ program
 
 program
   .command('switch [name]')
+  .alias('sw')
   .description('切换套餐')
   .action(switchProfileUI);
 

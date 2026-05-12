@@ -1,6 +1,6 @@
 # Claude Switch - 产品规格说明书
 
-> 版本：3.1.0 | 最后更新：2026-05-09
+> 版本：3.2.0 | 最后更新：2026-05-12
 
 ---
 
@@ -139,9 +139,10 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 
 #### F12: CLI 命令行
 - `claude-switch current` — 查看当前环境变量
-- `claude-switch list` — 列出所有套餐
+- `claude-switch list` / `ls` — 列出所有套餐
 - `claude-switch add` — 交互式添加套餐
-- `claude-switch switch` — 交互式切换套餐
+- `claude-switch switch` / `sw` — 交互式切换套餐
+- `claude-switch remove` / `rm` — 删除套餐
 - `claude-switch serve` — 启动 Web 管理服务（见 F20-F25）
 
 #### F13: 备份原因标注
@@ -151,7 +152,6 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 - 示例：`profiles-2026-05-03T13-22-00_switch-aliyun-pro.json`
 
 #### F14: 还原前 Diff 预览
-- 新增独立工具模块 `lib/diff.js`（JSON diff 工具）
 - diff 工具功能：输入两个 JSON 对象，输出 `{ added: [...], removed: [...], changed: [...{key, oldValue, newValue}], unchanged: [...] }`
 - 敏感字段（包含 TOKEN 的 key）的值统一脱敏为 `••••••••`
 - API: `GET /api/backups/:type/:fileName/preview` 返回 diff 结果
@@ -197,7 +197,7 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 
 #### F20: claude-switch serve
 - 在 CLI 中新增 `serve` 子命令，统一管理 Web 服务的启动、停止、状态查询
-- 替代原有的 pm2 守护方案，不引入外部依赖，纯 Node.js 标准库实现
+- 纯 Node.js 标准库实现，不引入外部守护进程依赖
 - **命令接口**：
   - `claude-switch serve` — 前台运行，默认端口 3333
   - `claude-switch serve -p <port>` — 指定端口
@@ -213,7 +213,7 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 - PID 文件内容为 JSON：`{ "pid": 12345, "port": 3333, "startedAt": "ISO-8601" }`
 - 启动前检查：
   - PID 文件不存在 → 正常启动
-  - PID 文件存在 → `process.kill(pid, 0)` 检测进程存活
+  - PID 文件存在 → 检测进程存活
     - 存活 → 报错退出，提示「服务已在运行，PID: xxx，端口: xxx」
     - 不存活 → 清理 stale PID 文件，正常启动
 - 前台和后台模式均写入 PID 文件
@@ -222,13 +222,11 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 - 启动 Express 服务，绑定到指定端口
 - 写入 PID 文件
 - 捕获 `SIGINT` / `SIGTERM`，优雅关闭：停止接受新连接 → 等待现有请求完成（最多 5s） → 删除 PID 文件 → 退出
-- 打印：`管理端已启动 → http://localhost:PORT`
 
 #### F23: 后台运行（daemon）
 - 使用 `child_process.spawn` 启动子进程，传入内部参数 `--daemon-child`（用户不可直接使用）
 - 子进程 `detached: true`，父进程 `unref()` 后退出
 - 子进程 stdout/stderr 重定向到 `~/.claude-switch/server.log`
-- 父进程打印：`管理端已后台启动 → PID: xxx, http://localhost:PORT, 日志: ~/.claude-switch/server.log`
 - PID 文件由子进程写入（与前台模式共享同一逻辑）
 
 #### F24: 停止服务（--stop）
@@ -236,7 +234,6 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 - 发送 `SIGTERM`，轮询进程退出（每 200ms，最多 5s）
 - 超时未退出 → `SIGKILL`
 - 清理 PID 文件
-- 打印「服务已停止，PID: xxx」
 
 #### F25: 状态查询（--status）
 - 读取 PID 文件，不存在 → 打印「服务未在运行」
@@ -245,102 +242,29 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 
 ---
 
-## 4. 技术规格
+## 4. 接口契约
 
-### 4.1 系统架构
+### 4.1 API 接口
 
-```
-┌──────────────┐     HTTP/REST      ┌──────────────┐
-│   Browser    │ ◄──────────────► │   Express     │
-│  (SPA HTML)  │                    │   Server      │
-└──────────────┘                    └──────┬───────┘
-                                           │
-                                    ┌──────▼───────┐
-                                    │  Profile      │
-                                    │  Manager      │
-                                    └──┬───┬───┬───┘
-                                       │   │   │
-                              ┌────────┘   │   └────────┐
-                              ▼            ▼            ▼
-                         ┌────────┐  ┌────────┐  ┌────────┐
-                         │ Crypto │  │ Backup  │  │ Logger │
-                         │ Utils  │  │         │  │        │
-                         └────────┘  └────────┘  └────────┘
-```
+| 方法 | 路径 | 说明 | 请求体 | 返回 |
+|---|---|---|---|---|
+| GET | `/api/profiles` | 套餐列表 + 活跃状态（Token 脱敏） | — | `{ active, profiles, mismatch }` |
+| PUT | `/api/profiles/:name` | 编辑套餐（合并更新） | `{ env }` | `{ success: true }` |
+| POST | `/api/profiles` | 新增/更新套餐 | `{ name, env }` | `{ success: true }` |
+| POST | `/api/profiles/clone` | 克隆套餐（含真实 Key） | `{ source, name, overrides }` | `{ success: true }` |
+| DELETE | `/api/profiles/:name` | 删除套餐 | — | `{ success: true }` |
+| POST | `/api/switch` | 切换套餐 | `{ name }` | `{ success: true }` |
+| GET | `/api/current` | 当前环境（Token 脱敏）+ 一致性状态 | — | `{ env, activeProfile, mismatch }` |
+| GET | `/api/presets` | 预设模板列表 | — | `{ key: { label, baseUrl, ... } }` |
+| GET | `/api/backups/:type` | 备份列表 | — | `[{fileName, reason, timestamp}]` |
+| GET | `/api/backups/:type/:fileName/preview` | 备份 diff 预览 | — | diff 结果 |
+| POST | `/api/restore` | 还原备份 | `{ type, backupFileName }` | `{ success: true }` |
+| GET | `/api/logs?date=` | 操作日志 | — | `[{ date, content }]` |
+| GET | `/api/first-install` | 首次安装检测 | — | `{ firstInstall, hasExisting, config }` |
 
-### 4.2 项目结构
+### 4.2 数据结构
 
-```
-claude-switch/
-├── src/
-│   ├── lib/
-│   │   ├── config.ts           # 路径常量，支持环境变量覆盖
-│   │   ├── crypto-utils.ts     # AES-256-CBC 加解密
-│   │   ├── profile-manager.ts  # 核心业务逻辑（CRUD、切换、预设模板）
-│   │   ├── backup.ts           # 备份还原管理
-│   │   ├── diff.ts             # JSON diff 工具
-│   │   ├── logger.ts           # 操作日志
-│   │   ├── serve.ts            # serve 命令逻辑
-│   │   └── types.ts            # TypeScript 类型定义
-│   ├── index.ts                # CLI 入口
-│   ├── server.ts               # Express Web 服务器
-│   └── env.d.ts                # 环境变量类型声明
-├── public/
-│   ├── index.html              # Web 管理页面
-│   ├── styles.css              # CSS 样式（暗色模式）
-│   └── app.js                  # 前端逻辑（原生 JS）
-├── tests/
-│   ├── index.test.ts           # 集成测试
-│   └── serve.test.ts           # serve 命令测试
-├── docs/
-│   └── PRD.md                  # 本文档
-├── tsconfig.json               # TypeScript 配置
-├── tsup.config.ts              # 构建配置
-├── vitest.config.ts            # 测试配置
-├── package.json
-├── README.md                   # 用户指南
-└── CLAUDE.md                   # 开发指南
-```
-
-### 4.3 依赖项
-
-| 包名 | 版本 | 用途 |
-|---|---|---|
-| express | ^4.21 | HTTP 服务器 |
-| cors | ^2.8 | 跨域支持 |
-| fs-extra | ^11.2 | 文件系统操作 |
-| commander | ^11.1 | CLI 命令解析 |
-| inquirer | ^8.2 | CLI 交互式提示 |
-| chalk | ^5.6 | CLI 彩色输出 |
-| proper-lockfile | ^4.1 | 文件锁（并发保护） |
-
-### 4.4 开发依赖
-
-| 包名 | 版本 | 用途 |
-|---|---|---|
-| typescript | ^6.0 | TypeScript 编译器 |
-| tsup | ^8.5 | TypeScript 构建工具 |
-| tsx | ^4.21 | TypeScript 执行器 |
-| vitest | ^4.1 | 测试框架 |
-| supertest | ^7.2 | API 测试 |
-
-### 4.4 数据存储
-
-所有数据存储在 `~/.claude-switch/` 目录（可通过 `CLAUDE_SWITCH_DIR` 环境变量覆盖）：
-
-```
-~/.claude-switch/
-├── profiles.json     # 套餐配置（Token 加密存储），结构见 4.4.1
-├── server.pid        # serve 运行状态（JSON，启动时写入，停止时删除）
-├── server.log        # serve 后台模式日志（追加写入）
-├── backups/          # 自动备份（按时间戳命名）
-│   ├── profiles-2026-04-26T14-30-00-000Z.json
-│   └── settings-2026-04-26T14-30-00-000Z.json
-└── logs/             # 操作日志（按日期命名）
-    └── 2026-04-26.log
-```
-
-#### 4.4.1 profiles.json 结构（v3.0）
+#### profiles.json
 
 ```json
 {
@@ -354,133 +278,54 @@ claude-switch/
         "ANTHROPIC_DEFAULT_SONNET_MODEL": "qwen3.5-plus",
         "ANTHROPIC_DEFAULT_HAIKU_MODEL": "qwen3.5-turbo"
       }
-    },
-    "deepseek": {
-      "env": { ... }
     }
   }
 }
 ```
 
-- `active`：当前选中的套餐名称（字符串），无选中时为空字符串
+- `active`：当前选中的套餐名称，无选中时为空字符串
 - `profiles`：套餐集合，key 为套餐名
 - 旧格式（顶层直接是 `{ name: { env } }`）在首次加载时自动迁移
 
-Claude Code 配置文件：`~/.claude/settings.json`
+#### server.pid
 
-### 4.5 API 接口
-
-| 方法 | 路径 | 说明 | 请求体 | 返回 |
-|---|---|---|---|---|
-| GET | `/api/profiles` | 套餐列表 + 活跃状态（Token 脱敏） | — | `{ active: string \| null, profiles: { name: { env: {...} } }, mismatch: boolean \| null }` |
-| PUT | `/api/profiles/:name` | 编辑套餐（合并更新） | `{ env }` | `{ success: true }` |
-| POST | `/api/profiles` | 新增/更新套餐 | `{ name, env }` | `{ success: true }` |
-| POST | `/api/profiles/clone` | 克隆套餐（含真实 Key） | `{ source, name, overrides }` | `{ success: true }` |
-| DELETE | `/api/profiles/:name` | 删除套餐 | — | `{ success: true }` |
-| POST | `/api/switch` | 切换套餐 | `{ name }` | `{ success: true }` |
-| GET | `/api/current` | 当前环境（Token 脱敏）+ 一致性状态 | — | `{ env: { key: value }, activeProfile: string \| null, mismatch: boolean \| null }` |
-| GET | `/api/presets` | 预设模板列表 | — | `{ key: { label, baseUrl, ... } }` |
-| GET | `/api/backups/:type` | 备份列表 | — | `[{fileName, reason, timestamp}, ...]` |
-| GET | `/api/backups/:type/:fileName/preview` | 备份 diff 预览 | — | diff 结果 |
-| POST | `/api/restore` | 还原备份 | `{ type, backupFileName }` | `{ success: true }` |
-| GET | `/api/logs?date=` | 操作日志 | — | `[{ date, content }]` |
-| GET | `/api/first-install` | 首次安装检测 | — | `{ firstInstall, hasExisting, config }` |
-
-### 4.6 加密实现
-
-```
-密钥派生:
-  machineId = UUID(machine-id) 或 fallback
-  seed = machineId + hostname + username + platform + arch + totalmem + cpu_model + salt
-  key = SHA-256(seed) → 取前 32 字节
-
-加密流程:
-  IV = crypto.randomBytes(16)
-  cipher = AES-256-CBC(key, IV)
-  ciphertext = cipher.update(plaintext) + cipher.final()
-  stored = Base64(IV) + ':' + Base64(ciphertext)
-
-解密流程:
-  [ivB64, ctB64] = stored.split(':')
-  若无 ':' → 视为明文直接返回（向后兼容）
-  plaintext = decipher(Base64(ivB64), Base64(ctB64))
+```json
+{ "pid": 12345, "port": 3333, "startedAt": "2026-05-12T10:00:00.000Z" }
 ```
 
----
-
-## 5. 测试规格
-
-### 5.1 测试覆盖率
-
-共 38+ 个测试用例，分为 5 个测试套件：
-
-| 套件 | 用例数 | 覆盖范围 |
-|---|---|---|
-| Profile Manager | 13 | CRUD、加密验证、备份、错误处理 |
-| Crypto Utils | 5 | 加解密往返、向后兼容、随机 IV、重加密检测 |
-| Diff Utils | 7 | 空对象、相同对象、新增/删除/变更 key、敏感字段脱敏、嵌套对象 |
-| Preset Templates | 2 | 模板完整性、字段校验 |
-| API Endpoints | 15+ | 全部 REST 接口、脱敏、合并更新、安全防护、完整工作流、备份预览 |
-
-### 5.2 测试隔离策略
-
-- 通过 `CLAUDE_SWITCH_DIR` 环境变量将数据目录指向临时目录
-- 每个测试用例前后清理临时目录
-- 不依赖真实的 `~/.claude/` 或 `~/.claude-switch/` 数据
-
----
-
-## 6. 部署规格
-
-### 6.1 系统要求
-
-- Node.js >= 24（支持 ESM + TypeScript）
-- macOS / Linux（Windows 理论上可用但未测试）
-- Claude Code 已安装
-
-### 6.2 安装步骤
-
-```bash
-git clone https://github.com/iazrael/claude-switch.git
-cd claude-switch
-pnpm install
-pnpm build      # 构建 TypeScript
-pnpm link       # 全局安装命令
-```
-
-### 6.3 启动方式
-
-```bash
-# 推荐：使用 serve 命令
-claude-switch serve                  # 前台运行
-claude-switch serve -d               # 后台运行
-claude-switch serve -d -p 8080       # 后台 + 指定端口
-claude-switch serve --stop           # 停止
-claude-switch serve --status         # 查看状态
-
-# 直接启动（开发模式）
-node dist/server.js                  # 构建后运行
-tsx server.ts                        # 开发时运行
-```
-
-### 6.4 环境变量
+### 4.3 环境变量
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| `CLAUDE_SWITCH_DIR` | `~/.claude-switch` | 数据存储目录（仅影响 profiles/backups/logs） |
+| `CLAUDE_SWITCH_DIR` | `~/.claude-switch` | 数据存储目录 |
 | `CLAUDE_SETTINGS_PATH` | `~/.claude/settings.json` | Claude Code 配置文件路径 |
 | `CLAUDE_SWITCH_PORT` | `3333` | Web 服务器端口 |
 
 ---
 
-## 7. 限制与已知问题
+## 5. 测试
+
+共 82 个测试用例，分为 6 个测试套件：
+
+| 套件 | 用例数 | 覆盖范围 |
+|---|---|---|
+| Profile Manager | 24 | CRUD、加密验证、备份、错误处理 |
+| Crypto Utils | 5 | 加解密往返、向后兼容、随机 IV、重加密检测 |
+| Diff Utils | 8 | 空对象、相同对象、新增/删除/变更 key、敏感字段脱敏 |
+| Preset Templates | 2 | 模板完整性、字段校验 |
+| API Endpoints | 19 | 全部 REST 接口、脱敏、合并更新、安全防护 |
+| Serve 命令 | 22 | 前台/后台启动、停止、状态、PID 管理、日志轮转 |
+
+测试通过 `CLAUDE_SWITCH_DIR` 环境变量将数据目录指向临时目录，不依赖真实数据。
+
+---
+
+## 6. 限制与已知问题
 
 1. **机器绑定**：加密密钥基于机器特征，更换机器后需重新输入 API Key
 2. **无鉴权**：Web 管理端无登录机制，依赖局域网隔离，不建议公网暴露
 3. **单实例**：不支持多用户并发，同一时间只能有一个用户操作
-4. **settings.json 合并**：切换套餐采用合并策略写入 `settings.json` 中的 `env` 字段，仅更新套餐定义的变量，不影响其他 env 变量
+4. **settings.json 合并**：切换套餐采用合并策略写入，仅更新套餐定义的变量，不影响其他 env 变量
 5. **备份上限**：自动备份保留最近 20 份，超出自动清理最旧的
 6. **日志保留**：操作日志保留 30 天，超出自动清理
 7. **Windows 兼容性**：未在 Windows 上测试，path 处理可能存在问题
-
-

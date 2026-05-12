@@ -72,14 +72,14 @@ pnpm link       # 全局安装命令
 ```bash
 claude-switch              # 无参数运行，显示当前环境
 claude-switch current      # 查看当前环境变量
-claude-switch list         # 列出所有套餐
+claude-switch list         # 列出所有套餐（别名: ls）
 claude-switch add          # 添加套餐
-claude-switch switch       # 切换套餐
-claude-switch remove       # 删除套餐
+claude-switch switch       # 切换套餐（别名: sw）
+claude-switch remove       # 删除套餐（别名: rm）
 claude-switch --help       # 查看帮助
 ```
 
-> 提示：可加别名 `alias cs='claude-switch'` 简化输入。
+> 提示：可加别名 `alias cs='claude-switch'` 简化输入，如 `cs sw aliyun`。
 
 ### Web 模式（推荐）
 
