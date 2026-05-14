@@ -99,10 +99,7 @@ describe('Profile Manager', () => {
     expect(data.profiles['update-test'].env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
     expect(data.profiles['update-test'].env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBeUndefined();
   });
-    const data = await manager.getProfiles();
-    expect(data.profiles['update-test'].env.ANTHROPIC_BASE_URL).toBe('https://updated.com');
-    expect(data.profiles['update-test'].env.ANTHROPIC_AUTH_TOKEN).toBe('sk-test-abc123');
-  });
+
 
   it('updateProfile 不存在的套餐应该抛错', async () => {
     await expect(manager.updateProfile('nonexistent', { ANTHROPIC_BASE_URL: 'x' })).rejects.toThrow('不存在');

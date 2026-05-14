@@ -225,40 +225,22 @@ export async function addProfile(name: string, env: ClaudeEnv): Promise<void> {
 }
 
 // 更新套餐：用新 env 中的非空字段覆盖旧字段，空字段保留原值
-export async function updateProfile(name: string, env: ClaudeEnv): Promise<void> {
+export async function updateProfile(name: string, env: Partial<ClaudeEnv>): Promise<void> {
   return withLock(async () => {
     const data = await _getProfilesDecryptedInner();
     if (!data.profiles[name]) throw new Error(`套餐 "${name}" 不存在`);
-    const oldEnv = data.profiles[name].env || {};
-    const merged: ClaudeEnv = { ...oldEnv };
+    const merged: ClaudeEnv = { ...data.profiles[name].env };
     for (const [key, value] of Object.entries(env) as [keyof ClaudeEnv, string | undefined][]) {
-      if (value && typeof value === 'string' && value.trim() !== '') {
+      if (value === undefined) continue; // skip untouched fields
+      if (value.trim() === '') {
+        delete merged[key]; // empty string = clear field
+      } else {
         merged[key] = value.trim();
       }
     }
     data.profiles[name] = { env: merged };
     await saveProfilesSafe(data, `update-${name}`);
     await logAction('WRITE_PROFILES', `更新套餐 "${name}"`);
-  });
-}
-
-// editProfile: update only provided fields; empty string = clear field, undefined = skip
-export async function editProfile(name: string, updates: Partial<ClaudeEnv>): Promise<void> {
-  return withLock(async () => {
-    const data = await _getProfilesDecryptedInner();
-    if (!data.profiles[name]) throw new Error(`套餐 "${name}" 不存在`);
-    const env = { ...data.profiles[name].env };
-    for (const [key, value] of Object.entries(updates) as [keyof ClaudeEnv, string | undefined][]) {
-      if (value === undefined) continue; // skip untouched fields
-      if (value.trim() === '') {
-        delete env[key]; // clear
-      } else {
-        env[key] = value.trim();
-      }
-    }
-    data.profiles[name] = { env };
-    await saveProfilesSafe(data, `edit-${name}`);
-    await logAction('WRITE_PROFILES', `编辑套餐 "${name}"`);
   });
 }
 

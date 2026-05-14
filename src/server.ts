@@ -51,7 +51,7 @@ app.post('/api/profiles', async (req: Request, res: Response) => {
   }
 });
 
-// 更新套餐（合并：非空字段覆盖，空字段保留原值）
+// 更新套餐（undefined 跳过，空字符串清除，非空覆盖）
 app.put('/api/profiles/:name', async (req: Request, res: Response) => {
   try {
     const { env } = req.body as { env: Record<string, string> };

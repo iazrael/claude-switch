@@ -136,7 +136,7 @@ async function editProfileUI(name?: string): Promise<void> {
     return;
   }
 
-  await manager.editProfile(name, updates);
+  await manager.updateProfile(name, updates);
   console.log(chalk.green(`套餐 "${name}" 已更新`));
 }
 
