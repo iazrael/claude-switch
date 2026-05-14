@@ -237,6 +237,128 @@ describe('Profile Manager', () => {
     const migrationBackup = backups.find(b => b.reason === 'migration');
     expect(migrationBackup).toBeDefined();
   });
+
+  // ---------- v3.3.0 edit & copy ----------
+
+  describe('editProfile', () => {
+    it('should edit single field', async () => {
+      await manager.addProfile('edit-test', TEST_ENV);
+      await manager.editProfile('edit-test', { ANTHROPIC_BASE_URL: 'https://new-url.com' });
+      const data = await manager.getProfiles();
+      expect(data.profiles['edit-test'].env.ANTHROPIC_BASE_URL).toBe('https://new-url.com');
+      expect(data.profiles['edit-test'].env.ANTHROPIC_AUTH_TOKEN).toBe('***');
+      expect(data.profiles['edit-test'].env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe('test-sonnet');
+    });
+
+    it('should edit multiple fields', async () => {
+      await manager.addProfile('edit-multi', TEST_ENV);
+      await manager.editProfile('edit-multi', {
+        ANTHROPIC_BASE_URL: 'https://updated.com',
+        ANTHROPIC_DEFAULT_SONNET_MODEL: 'new-sonnet',
+      });
+      const data = await manager.getProfiles();
+      expect(data.profiles['edit-multi'].env.ANTHROPIC_BASE_URL).toBe('https://updated.com');
+      expect(data.profiles['edit-multi'].env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe('new-sonnet');
+      expect(data.profiles['edit-multi'].env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe('test-opus');
+    });
+
+    it('empty string should clear field', async () => {
+      await manager.addProfile('edit-clear', TEST_ENV);
+      await manager.editProfile('edit-clear', { ANTHROPIC_DEFAULT_OPUS_MODEL: '' });
+      const data = await manager.getProfiles();
+      expect(data.profiles['edit-clear'].env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBeUndefined();
+      expect(data.profiles['edit-clear'].env.ANTHROPIC_BASE_URL).toBe('https://api.test.com/anthropic');
+    });
+
+    it('undefined fields should be skipped', async () => {
+      await manager.addProfile('edit-skip', TEST_ENV);
+      await manager.editProfile('edit-skip', { ANTHROPIC_BASE_URL: 'https://skip.com', ANTHROPIC_DEFAULT_OPUS_MODEL: undefined });
+      const data = await manager.getProfiles();
+      expect(data.profiles['edit-skip'].env.ANTHROPIC_BASE_URL).toBe('https://skip.com');
+      expect(data.profiles['edit-skip'].env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe('test-opus');
+    });
+
+    it('should throw for nonexistent profile', async () => {
+      await expect(manager.editProfile('nonexistent', { ANTHROPIC_BASE_URL: 'x' })).rejects.toThrow();
+    });
+
+    it('should create backup after edit', async () => {
+      await manager.addProfile('edit-backup', TEST_ENV);
+      await manager.editProfile('edit-backup', { ANTHROPIC_BASE_URL: 'https://backup-test.com' });
+      const backups = await manager.getBackups('profiles');
+      const editBackup = backups.find(b => b.reason === 'edit-edit-backup');
+      expect(editBackup).toBeDefined();
+    });
+
+    it('should not change active after edit', async () => {
+      await manager.addProfile('edit-active-a', TEST_ENV);
+      await manager.addProfile('edit-active-b', TEST_ENV);
+      await manager.switchProfile('edit-active-a');
+      await manager.editProfile('edit-active-b', { ANTHROPIC_BASE_URL: 'https://changed.com' });
+      const active = await manager.getActive();
+      expect(active).toBe('edit-active-a');
+    });
+  });
+
+  describe('copyProfile', () => {
+    it('should copy profile', async () => {
+      await manager.addProfile('copy-source', TEST_ENV);
+      await manager.copyProfile('copy-source', 'copy-target');
+      const data = await manager.getProfiles();
+      expect(data.profiles['copy-target']).toBeDefined();
+      expect(data.profiles['copy-target'].env.ANTHROPIC_BASE_URL).toBe('https://api.test.com/anthropic');
+      expect(data.profiles['copy-target'].env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe('test-sonnet');
+    });
+
+    it('source should remain unchanged after copy', async () => {
+      await manager.addProfile('copy-orig', TEST_ENV);
+      await manager.copyProfile('copy-orig', 'copy-clone');
+      const data = await manager.getProfiles();
+      expect(data.profiles['copy-orig'].env.ANTHROPIC_BASE_URL).toBe('https://api.test.com/anthropic');
+      expect(data.profiles['copy-orig'].env.ANTHROPIC_AUTH_TOKEN).toBe('***');
+    });
+
+    it('editing copy should not affect source', async () => {
+      await manager.addProfile('copy-isolate', TEST_ENV);
+      await manager.copyProfile('copy-isolate', 'copy-isolate-clone');
+      await manager.editProfile('copy-isolate-clone', { ANTHROPIC_BASE_URL: 'https://changed.com' });
+      const data = await manager.getProfiles();
+      expect(data.profiles['copy-isolate'].env.ANTHROPIC_BASE_URL).toBe('https://api.test.com/anthropic');
+      expect(data.profiles['copy-isolate-clone'].env.ANTHROPIC_BASE_URL).toBe('https://changed.com');
+    });
+
+    it('should throw for nonexistent source', async () => {
+      await expect(manager.copyProfile('nonexistent', 'target')).rejects.toThrow();
+    });
+
+    it('should overwrite existing target', async () => {
+      await manager.addProfile('cp-overwrite-src', TEST_ENV);
+      await manager.addProfile('cp-overwrite-dst', {
+        ...TEST_ENV,
+        ANTHROPIC_BASE_URL: 'https://different.com',
+      });
+      await manager.copyProfile('cp-overwrite-src', 'cp-overwrite-dst');
+      const data = await manager.getProfiles();
+      expect(data.profiles['cp-overwrite-dst'].env.ANTHROPIC_BASE_URL).toBe('https://api.test.com/anthropic');
+    });
+
+    it('should create backup after copy', async () => {
+      await manager.addProfile('cp-backup', TEST_ENV);
+      await manager.copyProfile('cp-backup', 'cp-backup-clone');
+      const backups = await manager.getBackups('profiles');
+      const copyBackup = backups.find(b => b.reason === 'copy-cp-backup-to-cp-backup-clone');
+      expect(copyBackup).toBeDefined();
+    });
+
+    it('should not change active after copy', async () => {
+      await manager.addProfile('cp-active-src', TEST_ENV);
+      await manager.addProfile('cp-active-dst', TEST_ENV);
+      await manager.switchProfile('cp-active-src');
+      await manager.copyProfile('cp-active-dst', 'cp-active-new');
+      const active = await manager.getActive();
+      expect(active).toBe('cp-active-src');
+    });
+  });
 });
 
 // ========== Crypto Utils Tests ==========
