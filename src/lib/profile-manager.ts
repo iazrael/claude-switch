@@ -244,17 +244,13 @@ export async function updateProfile(name: string, env: Partial<ClaudeEnv>): Prom
   });
 }
 
-// copyProfile: deep copy source profile to target name
+// copyProfile: copy source profile env to target name
 export async function copyProfile(source: string, target: string): Promise<void> {
+  if (!target.trim()) throw new Error('目标套餐名称不能为空');
   return withLock(async () => {
     const data = await _getProfilesDecryptedInner();
     if (!data.profiles[source]) throw new Error(`套餐 "${source}" 不存在`);
-    const sourceEnv = data.profiles[source].env;
-    const copiedEnv: ClaudeEnv = {};
-    for (const [key, value] of Object.entries(sourceEnv) as [keyof ClaudeEnv, string | undefined][]) {
-      if (value !== undefined) copiedEnv[key] = value;
-    }
-    data.profiles[target] = { env: copiedEnv };
+    data.profiles[target] = { env: { ...data.profiles[source].env } };
     await saveProfilesSafe(data, `copy-${source}-to-${target}`);
     await logAction('WRITE_PROFILES', `复制套餐 "${source}" → "${target}"`);
   });

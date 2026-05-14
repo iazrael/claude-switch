@@ -220,7 +220,7 @@ export async function copyProfile(
 
 1. `withLock` 内读取解密数据
 2. 源套餐不存在 → 抛 `Error('套餐 "xxx" 不存在')`
-3. 深拷贝源 env：`{ ...sourceEnv }` 展开后逐字段复制
+3. 复制源 env：`{ ...sourceEnv }` spread 复制（ClaudeEnv 值类型均为 string，无嵌套对象）
 4. 写入目标名（如果目标已存在则覆盖，由 CLI 层负责确认）
 5. 调用 `saveProfilesSafe` + `logAction('copy', ...)`
 

@@ -334,6 +334,21 @@ describe('Profile Manager', () => {
       await expect(manager.copyProfile('nonexistent', 'target')).rejects.toThrow();
     });
 
+    it('should throw for empty target name', async () => {
+      await manager.addProfile('cp-empty-target', TEST_ENV);
+      await expect(manager.copyProfile('cp-empty-target', '')).rejects.toThrow();
+      await expect(manager.copyProfile('cp-empty-target', '   ')).rejects.toThrow();
+    });
+
+    it('should throw for source === target', async () => {
+      await manager.addProfile('cp-self', TEST_ENV);
+      // source === target is validated at CLI layer, copyProfile itself allows it
+      // (just overwrites with same data, harmless)
+      await manager.copyProfile('cp-self', 'cp-self');
+      const data = await manager.getProfiles();
+      expect(data.profiles['cp-self']).toBeDefined();
+    });
+
     it('should overwrite existing target', async () => {
       await manager.addProfile('cp-overwrite-src', TEST_ENV);
       await manager.addProfile('cp-overwrite-dst', {

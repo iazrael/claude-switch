@@ -1,6 +1,6 @@
 {
   "name": "claude-switch",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "type": "module",
   "description": "Claude Code 套餐管理工具 - CLI + Web 管理端，支持日志备份和一键还原",
   "main": "dist/index.js",

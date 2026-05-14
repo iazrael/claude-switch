@@ -118,20 +118,13 @@ async function editProfileUI(name?: string): Promise<void> {
         message: `${field.label}${defaultDisplay ? ` (当前: ${defaultDisplay})` : ''}：`,
       },
     ]);
-    if (key === 'ANTHROPIC_AUTH_TOKEN' && newValue.trim() === '***') {
-      // User entered *** which means keep current
-      continue;
-    }
-    updates[key] = newValue.trim();
+    const trimmed = newValue.trim();
+    if (!trimmed) continue; // 回车跳过 = 保持不变
+    if (key === 'ANTHROPIC_AUTH_TOKEN' && trimmed === '***') continue;
+    updates[key] = trimmed;
   }
 
-  // Check if anything actually changed
-  const hasChanges = Object.entries(updates).some(([key, val]) => {
-    const currentVal = currentEnv[key as keyof typeof currentEnv] || '';
-    return val !== currentVal;
-  });
-
-  if (!hasChanges) {
+  if (Object.keys(updates).length === 0) {
     console.log(chalk.yellow('无变更'));
     return;
   }
@@ -178,9 +171,13 @@ async function copyProfileUI(source?: string, target?: string, options?: { exact
     return;
   }
 
-  // Check if target exists
-  const existingNames = await manager.getAllProfileNames();
-  if (existingNames.includes(target)) {
+  if (source === target) {
+    console.log(chalk.red('源套餐和目标套餐不能相同'));
+    return;
+  }
+
+  // Check if target exists (reuse names from above)
+  if (names.includes(target)) {
     const { overwrite } = await inquirer.prompt([
       {
         type: 'confirm',
