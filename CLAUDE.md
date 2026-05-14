@@ -192,17 +192,23 @@ interface DiffChange {
 | serve 守护进程 | 通过 PID 文件 + spawn detached 子进程实现后台运行 |
 | 前端 React 组件化 | 原生三文件已无法支撑交互复杂度，React + Vite 提供更好的开发体验 |
 
-## v3.3.0 新增功能设计：edit & copy
+## v3.3.0 变更：edit CLI + copy CLI
+
+### updateProfile 语义增强
+
+v3.3.0 增强了 `updateProfile` 的合并语义，使其同时支持 CLI edit 和 API update 场景：
+
+| 输入值 | 行为 | 说明 |
+|--------|------|------|
+| `undefined` | 跳过 | 未传入的字段不修改 |
+| `''`（空字符串） | 清除 | 删除该字段 |
+| 非空字符串 | 更新 | 覆写该字段 |
+
+旧版行为（只处理非空值，空值跳过）已废弃。新语义由 CLI edit 命令和 Web API 共用。
 
 ### profile-manager.ts 新增导出
 
 ```typescript
-// 编辑套餐：只更新传入的字段
-export async function editProfile(
-  name: string,
-  updates: Partial<ClaudeEnv>
-): Promise<void>
-
 // 复制套餐：深拷贝源套餐到目标名
 export async function copyProfile(
   source: string,
@@ -210,26 +216,18 @@ export async function copyProfile(
 ): Promise<void>
 ```
 
-### editProfile 实现要点
-
-1. `withLock` 内读取解密数据
-2. 套餐不存在 → 抛 `Error('套餐 "xxx" 不存在')`
-3. 合并 `updates` 到现有 env（`Object.assign` 语义，`undefined` 值的 key 不写入）
-4. 调用 `saveProfilesSafe` + `logAction('edit', ...)`
-5. 不触发 `switchProfile`（编辑不影响当前激活，除非正在编辑的就是 active 套餐 → 也只改 profiles.json，不改 settings.json）
-
 ### copyProfile 实现要点
 
 1. `withLock` 内读取解密数据
 2. 源套餐不存在 → 抛 `Error('套餐 "xxx" 不存在')`
-3. 深拷贝源 env：`structuredClone` 或 `{ ...sourceEnv }` 展开后逐字段复制
+3. 深拷贝源 env：`{ ...sourceEnv }` 展开后逐字段复制
 4. 写入目标名（如果目标已存在则覆盖，由 CLI 层负责确认）
 5. 调用 `saveProfilesSafe` + `logAction('copy', ...)`
 
 ### index.ts 新增命令
 
 ```typescript
-// edit 命令
+// edit 命令（底层调用 updateProfile）
 program
   .command('edit [name]')
   .alias('ed')
@@ -252,7 +250,7 @@ program
 3. Inquirer checkbox 多选要编辑的字段
 4. 对选中字段逐个 input（默认值=当前值，Token 默认值=`***`）
 5. 构建 `updates: Partial<ClaudeEnv>`，只包含实际修改的字段
-6. 调用 `manager.editProfile(name, updates)`
+6. 调用 `manager.updateProfile(name, updates)`
 
 ### copyProfileUI 交互流程
 
