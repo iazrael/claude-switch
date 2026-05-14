@@ -1,10 +1,12 @@
 # ⚡ Claude Switch
 
-Claude Code 套餐快速切换工具。支持多服务商配置管理，Web 管理界面，API Key 加密存储。
+Claude Code 套餐快速切换工具。支持多服务商配置管理，Web 管理界面，API Key 加密存储，套餐编辑与复制。
 
 ## 功能
 
 - 🔄 **一键切换** — 在不同服务商套餐间快速切换（阿里云百炼、火山引擎、智谱AI、DeepSeek 等）
+- ✏️ **编辑套餐** — 修改已有套餐的单个字段，无需删除重建
+- 📋 **复制套餐** — 基于现有套餐快速创建新套餐，适合同服务商多账号场景
 - 🔐 **加密存储** — API Key 使用 AES-256-CBC 基于机器特征加密
 - 📱 **Web 管理端** — 响应式界面，局域网内可直接操作
 - 💻 **CLI 模式** — 终端交互式操作
@@ -74,6 +76,8 @@ claude-switch              # 无参数运行，显示当前环境
 claude-switch current      # 查看当前环境变量
 claude-switch list         # 列出所有套餐（别名: ls）
 claude-switch add          # 添加套餐
+claude-switch edit         # 编辑套餐（别名: ed）
+claude-switch copy         # 复制套餐（别名: cp）
 claude-switch switch       # 切换套餐（别名: sw）
 claude-switch remove       # 删除套餐（别名: rm）
 claude-switch --help       # 查看帮助
