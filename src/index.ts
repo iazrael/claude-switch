@@ -42,6 +42,169 @@ async function addProfileUI(name?: string): Promise<void> {
   console.log(chalk.green(`套餐 "${name}" 已保存`));
 }
 
+// 交互：编辑套餐
+async function editProfileUI(name?: string): Promise<void> {
+  const names = await manager.getAllProfileNames();
+  if (names.length === 0) {
+    console.log(chalk.red('没有套餐可编辑'));
+    return;
+  }
+
+  if (!name) {
+    const answer = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'name',
+        message: '选择要编辑的套餐：',
+        choices: names,
+      },
+    ]);
+    name = answer.name;
+  }
+
+  if (!name) return;
+
+  // Get current profile env
+  const profileData = await manager.getProfiles();
+  if (!profileData.profiles[name]) {
+    console.log(chalk.red(`套餐 "${name}" 不存在`));
+    return;
+  }
+  const currentEnv = profileData.profiles[name].env;
+
+  // Show current values
+  console.log(chalk.cyan(`\n套餐 "${name}" 当前配置：`));
+  const fields: { key: keyof import('./lib/types.js').ClaudeEnv; label: string }[] = [
+    { key: 'ANTHROPIC_AUTH_TOKEN', label: 'API Key' },
+    { key: 'ANTHROPIC_BASE_URL', label: 'Base URL' },
+    { key: 'ANTHROPIC_DEFAULT_SONNET_MODEL', label: 'Sonnet 模型' },
+    { key: 'ANTHROPIC_DEFAULT_OPUS_MODEL', label: 'Opus 模型' },
+    { key: 'ANTHROPIC_DEFAULT_HAIKU_MODEL', label: 'Haiku 模型' },
+  ];
+  for (const f of fields) {
+    const val = currentEnv[f.key];
+    const display = f.key === 'ANTHROPIC_AUTH_TOKEN' ? (val ? '***' : '(未设置)') : (val || '(未设置)');
+    console.log(`  ${chalk.green(f.label)}: ${display}`);
+  }
+
+  // Select fields to edit
+  const { selectedFields } = await inquirer.prompt([
+    {
+      type: 'checkbox',
+      name: 'selectedFields',
+      message: '选择要修改的字段（空格选择，回车确认）：',
+      choices: fields.map(f => ({
+        name: f.label,
+        value: f.key,
+      })),
+    },
+  ]);
+
+  if (selectedFields.length === 0) {
+    console.log(chalk.yellow('未选择任何字段，退出编辑'));
+    return;
+  }
+
+  // Collect new values
+  const updates: Record<string, string> = {};
+  for (const key of selectedFields) {
+    const field = fields.find(f => f.key === key)!;
+    const currentVal = currentEnv[key as keyof typeof currentEnv];
+    const defaultDisplay = key === 'ANTHROPIC_AUTH_TOKEN' ? (currentVal ? '***' : '') : (currentVal || '');
+    const { newValue } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'newValue',
+        message: `${field.label}${defaultDisplay ? ` (当前: ${defaultDisplay})` : ''}：`,
+      },
+    ]);
+    if (key === 'ANTHROPIC_AUTH_TOKEN' && newValue.trim() === '***') {
+      // User entered *** which means keep current
+      continue;
+    }
+    updates[key] = newValue.trim();
+  }
+
+  // Check if anything actually changed
+  const hasChanges = Object.entries(updates).some(([key, val]) => {
+    const currentVal = currentEnv[key as keyof typeof currentEnv] || '';
+    return val !== currentVal;
+  });
+
+  if (!hasChanges) {
+    console.log(chalk.yellow('无变更'));
+    return;
+  }
+
+  await manager.editProfile(name, updates);
+  console.log(chalk.green(`套餐 "${name}" 已更新`));
+}
+
+// 交互：复制套餐
+async function copyProfileUI(source?: string, target?: string, options?: { exact?: boolean }): Promise<void> {
+  const names = await manager.getAllProfileNames();
+  if (names.length === 0) {
+    console.log(chalk.red('没有套餐可复制'));
+    return;
+  }
+
+  if (!source) {
+    const answer = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'source',
+        message: '选择要复制的源套餐：',
+        choices: names,
+      },
+    ]);
+    source = answer.source;
+  }
+
+  if (!source) return;
+
+  if (!target) {
+    const answer = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'target',
+        message: '新套餐名称：',
+      },
+    ]);
+    target = answer.target.trim();
+  }
+
+  if (!target) {
+    console.log(chalk.red('目标名称不能为空'));
+    return;
+  }
+
+  // Check if target exists
+  const existingNames = await manager.getAllProfileNames();
+  if (existingNames.includes(target)) {
+    const { overwrite } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'overwrite',
+        message: `套餐 "${target}" 已存在，是否覆盖？`,
+        default: false,
+      },
+    ]);
+    if (!overwrite) {
+      console.log(chalk.yellow('已取消'));
+      return;
+    }
+  }
+
+  await manager.copyProfile(source, target);
+  console.log(chalk.green(`已复制 "${source}" → "${target}"`));
+
+  // Default: enter edit mode for fine-tuning
+  if (!options?.exact) {
+    console.log(chalk.cyan('\n进入编辑模式，可修改差异化字段（回车跳过）：'));
+    await editProfileUI(target);
+  }
+}
+
 // 交互：删除套餐
 async function removeProfileUI(name?: string): Promise<void> {
   const names = await manager.getAllProfileNames();
@@ -239,6 +402,21 @@ program
   .command('add [name]')
   .description('添加套餐')
   .action(addProfileUI);
+
+program
+  .command('edit [name]')
+  .alias('ed')
+  .description('编辑套餐')
+  .action(editProfileUI);
+
+program
+  .command('copy [source] [target]')
+  .alias('cp')
+  .description('复制套餐')
+  .option('--exact', '纯复制，不进入编辑')
+  .action((source: string | undefined, target: string | undefined, opts: { exact?: boolean }) =>
+    copyProfileUI(source, target, opts)
+  );
 
 program
   .command('remove [name]')

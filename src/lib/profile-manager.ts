@@ -242,6 +242,42 @@ export async function updateProfile(name: string, env: ClaudeEnv): Promise<void>
   });
 }
 
+// editProfile: update only provided fields; empty string = clear field, undefined = skip
+export async function editProfile(name: string, updates: Partial<ClaudeEnv>): Promise<void> {
+  return withLock(async () => {
+    const data = await _getProfilesDecryptedInner();
+    if (!data.profiles[name]) throw new Error(`套餐 "${name}" 不存在`);
+    const env = { ...data.profiles[name].env };
+    for (const [key, value] of Object.entries(updates) as [keyof ClaudeEnv, string | undefined][]) {
+      if (value === undefined) continue; // skip untouched fields
+      if (value.trim() === '') {
+        delete env[key]; // clear
+      } else {
+        env[key] = value.trim();
+      }
+    }
+    data.profiles[name] = { env };
+    await saveProfilesSafe(data, `edit-${name}`);
+    await logAction('WRITE_PROFILES', `编辑套餐 "${name}"`);
+  });
+}
+
+// copyProfile: deep copy source profile to target name
+export async function copyProfile(source: string, target: string): Promise<void> {
+  return withLock(async () => {
+    const data = await _getProfilesDecryptedInner();
+    if (!data.profiles[source]) throw new Error(`套餐 "${source}" 不存在`);
+    const sourceEnv = data.profiles[source].env;
+    const copiedEnv: ClaudeEnv = {};
+    for (const [key, value] of Object.entries(sourceEnv) as [keyof ClaudeEnv, string | undefined][]) {
+      if (value !== undefined) copiedEnv[key] = value;
+    }
+    data.profiles[target] = { env: copiedEnv };
+    await saveProfilesSafe(data, `copy-${source}-to-${target}`);
+    await logAction('WRITE_PROFILES', `复制套餐 "${source}" → "${target}"`);
+  });
+}
+
 export async function removeProfile(name: string): Promise<void> {
   return withLock(async () => {
     const data = await _getProfilesDecryptedInner();

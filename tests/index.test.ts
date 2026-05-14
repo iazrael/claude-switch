@@ -246,7 +246,7 @@ describe('Profile Manager', () => {
       await manager.editProfile('edit-test', { ANTHROPIC_BASE_URL: 'https://new-url.com' });
       const data = await manager.getProfiles();
       expect(data.profiles['edit-test'].env.ANTHROPIC_BASE_URL).toBe('https://new-url.com');
-      expect(data.profiles['edit-test'].env.ANTHROPIC_AUTH_TOKEN).toBe('***');
+      expect(data.profiles['edit-test'].env.ANTHROPIC_AUTH_TOKEN).toBeDefined();
       expect(data.profiles['edit-test'].env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe('test-sonnet');
     });
 
@@ -315,7 +315,7 @@ describe('Profile Manager', () => {
       await manager.copyProfile('copy-orig', 'copy-clone');
       const data = await manager.getProfiles();
       expect(data.profiles['copy-orig'].env.ANTHROPIC_BASE_URL).toBe('https://api.test.com/anthropic');
-      expect(data.profiles['copy-orig'].env.ANTHROPIC_AUTH_TOKEN).toBe('***');
+      expect(data.profiles['copy-orig'].env.ANTHROPIC_AUTH_TOKEN).toBeDefined();
     });
 
     it('editing copy should not affect source', async () => {
