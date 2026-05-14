@@ -84,7 +84,7 @@ describe('Profile Manager', () => {
     expect(typeof env).toBe('object');
   });
 
-  it('应该能通过 updateProfile 更新套餐（非空字段覆盖，空字段保留）', async () => {
+  it('应该能通过 updateProfile 更新套餐（非空覆盖，空字符串清除）', async () => {
     await manager.addProfile('update-test', TEST_ENV);
     await manager.updateProfile('update-test', {
       ANTHROPIC_AUTH_TOKEN: '',
@@ -93,6 +93,12 @@ describe('Profile Manager', () => {
       ANTHROPIC_DEFAULT_SONNET_MODEL: '',
       ANTHROPIC_DEFAULT_HAIKU_MODEL: '',
     });
+    const data = await manager.getProfiles();
+    expect(data.profiles['update-test'].env.ANTHROPIC_BASE_URL).toBe('https://updated.com');
+    // empty string = clear field
+    expect(data.profiles['update-test'].env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+    expect(data.profiles['update-test'].env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBeUndefined();
+  });
     const data = await manager.getProfiles();
     expect(data.profiles['update-test'].env.ANTHROPIC_BASE_URL).toBe('https://updated.com');
     expect(data.profiles['update-test'].env.ANTHROPIC_AUTH_TOKEN).toBe('sk-test-abc123');
@@ -240,10 +246,10 @@ describe('Profile Manager', () => {
 
   // ---------- v3.3.0 edit & copy ----------
 
-  describe('editProfile', () => {
+  describe('updateProfile (enhanced)', () => {
     it('should edit single field', async () => {
       await manager.addProfile('edit-test', TEST_ENV);
-      await manager.editProfile('edit-test', { ANTHROPIC_BASE_URL: 'https://new-url.com' });
+      await manager.updateProfile('edit-test', { ANTHROPIC_BASE_URL: 'https://new-url.com' });
       const data = await manager.getProfiles();
       expect(data.profiles['edit-test'].env.ANTHROPIC_BASE_URL).toBe('https://new-url.com');
       expect(data.profiles['edit-test'].env.ANTHROPIC_AUTH_TOKEN).toBeDefined();
@@ -252,7 +258,7 @@ describe('Profile Manager', () => {
 
     it('should edit multiple fields', async () => {
       await manager.addProfile('edit-multi', TEST_ENV);
-      await manager.editProfile('edit-multi', {
+      await manager.updateProfile('edit-multi', {
         ANTHROPIC_BASE_URL: 'https://updated.com',
         ANTHROPIC_DEFAULT_SONNET_MODEL: 'new-sonnet',
       });
@@ -264,7 +270,7 @@ describe('Profile Manager', () => {
 
     it('empty string should clear field', async () => {
       await manager.addProfile('edit-clear', TEST_ENV);
-      await manager.editProfile('edit-clear', { ANTHROPIC_DEFAULT_OPUS_MODEL: '' });
+      await manager.updateProfile('edit-clear', { ANTHROPIC_DEFAULT_OPUS_MODEL: '' });
       const data = await manager.getProfiles();
       expect(data.profiles['edit-clear'].env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBeUndefined();
       expect(data.profiles['edit-clear'].env.ANTHROPIC_BASE_URL).toBe('https://api.test.com/anthropic');
@@ -272,21 +278,21 @@ describe('Profile Manager', () => {
 
     it('undefined fields should be skipped', async () => {
       await manager.addProfile('edit-skip', TEST_ENV);
-      await manager.editProfile('edit-skip', { ANTHROPIC_BASE_URL: 'https://skip.com', ANTHROPIC_DEFAULT_OPUS_MODEL: undefined });
+      await manager.updateProfile('edit-skip', { ANTHROPIC_BASE_URL: 'https://skip.com', ANTHROPIC_DEFAULT_OPUS_MODEL: undefined });
       const data = await manager.getProfiles();
       expect(data.profiles['edit-skip'].env.ANTHROPIC_BASE_URL).toBe('https://skip.com');
       expect(data.profiles['edit-skip'].env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe('test-opus');
     });
 
     it('should throw for nonexistent profile', async () => {
-      await expect(manager.editProfile('nonexistent', { ANTHROPIC_BASE_URL: 'x' })).rejects.toThrow();
+      await expect(manager.updateProfile('nonexistent', { ANTHROPIC_BASE_URL: 'x' })).rejects.toThrow();
     });
 
     it('should create backup after edit', async () => {
       await manager.addProfile('edit-backup', TEST_ENV);
-      await manager.editProfile('edit-backup', { ANTHROPIC_BASE_URL: 'https://backup-test.com' });
+      await manager.updateProfile('edit-backup', { ANTHROPIC_BASE_URL: 'https://backup-test.com' });
       const backups = await manager.getBackups('profiles');
-      const editBackup = backups.find(b => b.reason === 'edit-edit-backup');
+      const editBackup = backups.find(b => b.reason === 'update-edit-backup');
       expect(editBackup).toBeDefined();
     });
 
@@ -294,7 +300,7 @@ describe('Profile Manager', () => {
       await manager.addProfile('edit-active-a', TEST_ENV);
       await manager.addProfile('edit-active-b', TEST_ENV);
       await manager.switchProfile('edit-active-a');
-      await manager.editProfile('edit-active-b', { ANTHROPIC_BASE_URL: 'https://changed.com' });
+      await manager.updateProfile('edit-active-b', { ANTHROPIC_BASE_URL: 'https://changed.com' });
       const active = await manager.getActive();
       expect(active).toBe('edit-active-a');
     });
@@ -321,7 +327,7 @@ describe('Profile Manager', () => {
     it('editing copy should not affect source', async () => {
       await manager.addProfile('copy-isolate', TEST_ENV);
       await manager.copyProfile('copy-isolate', 'copy-isolate-clone');
-      await manager.editProfile('copy-isolate-clone', { ANTHROPIC_BASE_URL: 'https://changed.com' });
+      await manager.updateProfile('copy-isolate-clone', { ANTHROPIC_BASE_URL: 'https://changed.com' });
       const data = await manager.getProfiles();
       expect(data.profiles['copy-isolate'].env.ANTHROPIC_BASE_URL).toBe('https://api.test.com/anthropic');
       expect(data.profiles['copy-isolate-clone'].env.ANTHROPIC_BASE_URL).toBe('https://changed.com');
