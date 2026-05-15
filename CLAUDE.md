@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-Claude Code 套餐快速切换工具 (v3.2.0)，支持多服务商配置管理。提供 CLI 和 Web 两种操作模式，API Key 加密存储，操作自动备份和日志记录，serve 守护进程管理。
+Claude Code 套餐快速切换工具 (v3.3.0)，支持多服务商配置管理。提供 CLI 和 Web 两种操作模式，API Key 加密存储，操作自动备份和日志记录，serve 守护进程管理。
 
 核心场景：在阿里云百炼、火山引擎、智谱AI、DeepSeek 等 Anthropic API 兼容服务商之间一键切换 Claude Code 的环境变量配置。
 
@@ -191,6 +191,74 @@ interface DiffChange {
 | 预设模板硬编码 | 厂商 URL 和模型映射变化频率低，硬编码最简单可靠 |
 | serve 守护进程 | 通过 PID 文件 + spawn detached 子进程实现后台运行 |
 | 前端 React 组件化 | 原生三文件已无法支撑交互复杂度，React + Vite 提供更好的开发体验 |
+
+## v3.3.0 变更：edit CLI + copy CLI
+
+### updateProfile 语义增强
+
+v3.3.0 增强了 `updateProfile` 的合并语义，使其同时支持 CLI edit 和 API update 场景：
+
+| 输入值 | 行为 | 说明 |
+|--------|------|------|
+| `undefined` | 跳过 | 未传入的字段不修改 |
+| `''`（空字符串） | 清除 | 删除该字段 |
+| 非空字符串 | 更新 | 覆写该字段 |
+
+旧版行为（只处理非空值，空值跳过）已废弃。新语义由 CLI edit 命令和 Web API 共用。
+
+### profile-manager.ts 新增导出
+
+```typescript
+// 复制套餐：深拷贝源套餐到目标名
+export async function copyProfile(
+  source: string,
+  target: string
+): Promise<void>
+```
+
+### copyProfile 实现要点
+
+1. `withLock` 内读取解密数据
+2. 源套餐不存在 → 抛 `Error('套餐 "xxx" 不存在')`
+3. 复制源 env：`{ ...sourceEnv }` spread 复制（ClaudeEnv 值类型均为 string，无嵌套对象）
+4. 写入目标名（如果目标已存在则覆盖，由 CLI 层负责确认）
+5. 调用 `saveProfilesSafe` + `logAction('copy', ...)`
+
+### index.ts 新增命令
+
+```typescript
+// edit 命令（底层调用 updateProfile）
+program
+  .command('edit [name]')
+  .alias('ed')
+  .description('编辑套餐')
+  .action(editProfileUI);
+
+// copy 命令
+program
+  .command('copy [source] [target]')
+  .alias('cp')
+  .description('复制套餐')
+  .option('--exact', '纯复制，不进入编辑')
+  .action(copyProfileUI);
+```
+
+### editProfileUI 交互流程
+
+1. 未指定 name → `getAllProfileNames` + Inquirer list
+2. 读取当前套餐 env（解密，Token 显示 `***`）
+3. Inquirer checkbox 多选要编辑的字段
+4. 对选中字段逐个 input（默认值=当前值，Token 默认值=`***`）
+5. 构建 `updates: Partial<ClaudeEnv>`，只包含实际修改的字段
+6. 调用 `manager.updateProfile(name, updates)`
+
+### copyProfileUI 交互流程
+
+1. 确定源（未指定 → Inquirer list 选择）
+2. 确定目标名（未指定 → Inquirer input）
+3. 目标已存在 → Inquirer confirm 覆盖
+4. 调用 `manager.copyProfile(source, target)`
+5. 非 `--exact` 模式 → 直接进入 editProfileUI(target)
 
 ## 模型分层参考
 

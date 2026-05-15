@@ -1,6 +1,6 @@
 # Claude Switch - 产品规格说明书
 
-> 版本：3.2.0 | 最后更新：2026-05-12
+> 版本：3.3.0 | 最后更新：2026-05-14
 
 ---
 
@@ -82,7 +82,7 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 - 点击列表中的编辑按钮，加载该套餐的信息到表单
 - API Key 在列表中脱敏显示（`••••••••`），编辑时显示占位符「保持不变」
 - 用户输入新 Key 值则覆盖，留空保留原值
-- 采用合并更新策略：前端提交的非空字段覆盖原值，空字段保留原值
+- 采用合并更新策略：`undefined` 跳过、空字符串清除、非空字符串覆写（v3.3.0 语义增强）
 
 #### F3: 删除套餐
 - 删除前弹出确认提示
@@ -141,13 +141,15 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 - `claude-switch current` — 查看当前环境变量
 - `claude-switch list` / `ls` — 列出所有套餐
 - `claude-switch add` — 交互式添加套餐
+- `claude-switch edit` / `ed` — 交互式编辑套餐（F26）
+- `claude-switch copy` / `cp` — 复制套餐（F27）
 - `claude-switch switch` / `sw` — 交互式切换套餐
 - `claude-switch remove` / `rm` — 删除套餐
 - `claude-switch serve` — 启动 Web 管理服务（见 F20-F25）
 
 #### F13: 备份原因标注
 - 备份文件名格式改为 `{type}-{timestamp}_{reason}.json`（下划线分隔 reason）
-- reason 取值：`switch-{profileName}` / `add-{name}` / `remove-{name}` / `update-{name}` / `restore` / `migration`
+- reason 取值：`switch-{profileName}` / `add-{name}` / `remove-{name}` / `update-{name}` / `copy-{source}-to-{target}` / `restore` / `migration`
 - 备份列表 API 返回解析后的 reason 信息，前端展示
 - 示例：`profiles-2026-05-03T13-22-00_switch-aliyun-pro.json`
 
@@ -240,6 +242,31 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 - 进程存活 → 打印：PID、端口、运行时长（从 startedAt 计算）
 - 进程不存活 → 打印「PID 文件存在但进程已退出（stale）」，建议执行 `serve --stop` 清理
 
+
+### 3.7 CLI 编辑与复制（v3.3.0 新增）
+
+#### F26: CLI edit 命令
+- `claude-switch edit [name]` / `ed [name]` — 交互式编辑已有套餐
+- 未指定 name → Inquirer list 选择套餐
+- 显示当前套餐所有字段（Token 脱敏为 `***`）
+- Inquirer checkbox 多选要编辑的字段
+- 对选中字段逐个弹出 input，默认值为当前值，直接回车跳过（不修改）
+- Token 字段输入 `***` 视为不修改
+- 底层调用 `updateProfile`（F2 合并更新语义）
+- 编辑不影响当前激活状态（只改 profiles.json，不改 settings.json）
+
+#### F27: CLI copy 命令
+- `claude-switch copy [source] [target]` / `cp [source] [target]` — 复制套餐
+- 未指定 source → Inquirer list 选择源套餐
+- 未指定 target → Inquirer input 输入目标名
+- 源套餐不存在 → 报错
+- 目标名已存在 → Inquirer confirm 覆盖确认
+- 源 === 目标 → 报错（不允许自复制）
+- 复制后默认进入编辑模式微调差异化字段
+- `--exact` 标志：纯复制，不进入编辑
+- 操作自动创建备份
+
+
 ---
 
 ## 4. 接口契约
@@ -249,7 +276,7 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 | 方法 | 路径 | 说明 | 请求体 | 返回 |
 |---|---|---|---|---|
 | GET | `/api/profiles` | 套餐列表 + 活跃状态（Token 脱敏） | — | `{ active, profiles, mismatch }` |
-| PUT | `/api/profiles/:name` | 编辑套餐（合并更新） | `{ env }` | `{ success: true }` |
+| PUT | `/api/profiles/:name` | 编辑套餐（undefined跳过/空清除/非空覆写） | `{ env }` | `{ success: true }` |
 | POST | `/api/profiles` | 新增/更新套餐 | `{ name, env }` | `{ success: true }` |
 | POST | `/api/profiles/clone` | 克隆套餐（含真实 Key） | `{ source, name, overrides }` | `{ success: true }` |
 | DELETE | `/api/profiles/:name` | 删除套餐 | — | `{ success: true }` |

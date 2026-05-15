@@ -225,20 +225,34 @@ export async function addProfile(name: string, env: ClaudeEnv): Promise<void> {
 }
 
 // 更新套餐：用新 env 中的非空字段覆盖旧字段，空字段保留原值
-export async function updateProfile(name: string, env: ClaudeEnv): Promise<void> {
+export async function updateProfile(name: string, env: Partial<ClaudeEnv>): Promise<void> {
   return withLock(async () => {
     const data = await _getProfilesDecryptedInner();
     if (!data.profiles[name]) throw new Error(`套餐 "${name}" 不存在`);
-    const oldEnv = data.profiles[name].env || {};
-    const merged: ClaudeEnv = { ...oldEnv };
+    const merged: ClaudeEnv = { ...data.profiles[name].env };
     for (const [key, value] of Object.entries(env) as [keyof ClaudeEnv, string | undefined][]) {
-      if (value && typeof value === 'string' && value.trim() !== '') {
+      if (value === undefined) continue; // skip untouched fields
+      if (value.trim() === '') {
+        delete merged[key]; // empty string = clear field
+      } else {
         merged[key] = value.trim();
       }
     }
     data.profiles[name] = { env: merged };
     await saveProfilesSafe(data, `update-${name}`);
     await logAction('WRITE_PROFILES', `更新套餐 "${name}"`);
+  });
+}
+
+// copyProfile: copy source profile env to target name
+export async function copyProfile(source: string, target: string): Promise<void> {
+  if (!target.trim()) throw new Error('目标套餐名称不能为空');
+  return withLock(async () => {
+    const data = await _getProfilesDecryptedInner();
+    if (!data.profiles[source]) throw new Error(`套餐 "${source}" 不存在`);
+    data.profiles[target] = { env: { ...data.profiles[source].env } };
+    await saveProfilesSafe(data, `copy-${source}-to-${target}`);
+    await logAction('WRITE_PROFILES', `复制套餐 "${source}" → "${target}"`);
   });
 }
 
