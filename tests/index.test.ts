@@ -132,6 +132,29 @@ describe('Profile Manager', () => {
     expect(backups[0]).toHaveProperty('reason');
   });
 
+  it('hasBackupChanges 应能正确比对备份并判定有无实际变更', async () => {
+    // 1. 新增套餐以产生备份文件并改变当前环境
+    await manager.addProfile('has-changes-test', TEST_ENV);
+    const backupsAfterAdd = await manager.getBackups('profiles');
+    expect(backupsAfterAdd.length).toBeGreaterThanOrEqual(1);
+    const backupOfEmpty = backupsAfterAdd[0].fileName;
+
+    // 2. 删除套餐，让当前配置变回空，此时当前配置与最初的备份文件一致 (都为空)
+    await manager.removeProfile('has-changes-test');
+    
+    // 3. hasBackupChanges 比对空备份与空当前配置，应为 false (无变更)
+    const changed1 = await manager.hasBackupChanges('profiles', backupOfEmpty);
+    expect(changed1).toBe(false);
+
+    // 4. 再次比对删除套餐时产生的备份 (那个备份包含 has-changes-test) 与当前的空配置，应为 true (有变更)
+    const backupsAfterRemove = await manager.getBackups('profiles');
+    const backupWithProfile = backupsAfterRemove.find(b => b.reason === 'remove-has-changes-test');
+    expect(backupWithProfile).toBeDefined();
+    
+    const changed2 = await manager.hasBackupChanges('profiles', backupWithProfile!.fileName);
+    expect(changed2).toBe(true);
+  });
+
   // ---------- v3.0 新增测试 ----------
 
   it('旧格式 profiles.json 应自动迁移', async () => {

@@ -48,11 +48,11 @@ function AppContent() {
   // Load diagnostic data when tabs change
   useEffect(() => {
     if (activeTab === 'backups') {
-      loadBackups().catch(() => {});
+      loadBackups().catch(() => {}); // 切换Tab时静默加载备份，加载失败会在备份列表展示“无可用备份”及重试按钮，不打断用户
       setActiveBackupFile('');
       setActiveBackupDiff(null);
     } else if (activeTab === 'logs') {
-      loadLogs(logDate).catch(() => {});
+      loadLogs(logDate).catch(() => {}); // 切换Tab时静默加载日志，加载失败会在日志列表展示“暂无日志”及检索按钮，不打断用户
     }
   }, [activeTab, loadBackups, loadLogs, logDate]);
 
@@ -187,10 +187,11 @@ function AppContent() {
     try {
       await switchTo(name);
       showToast(`已切换到「${name}」，请重启 Claude Code`);
+      loadBackups().catch(() => {}); // 刷新备份列表失败不影响主流程，用户可手动重载
     } catch (e) {
       showToast(`切换失败: ${(e as Error).message}`);
     }
-  }, [switchTo, showToast]);
+  }, [switchTo, showToast, loadBackups]);
 
   // Delete profile
   const handleDelete = useCallback(async (name: string) => {
@@ -235,12 +236,13 @@ function AppContent() {
       showToast('还原成功，请重启 Claude Code');
       loadProfiles();
       loadCurrentEnv();
+      loadBackups().catch(() => {}); // 还原后刷新备份列表失败不影响还原成功状态
       setActiveBackupFile('');
       setActiveBackupDiff(null);
     } catch (e) {
       showToast(`还原失败: ${(e as Error).message}`);
     }
-  }, [backupType, restore, loadProfiles, loadCurrentEnv, showToast]);
+  }, [backupType, restore, loadProfiles, loadCurrentEnv, loadBackups, showToast]);
 
   // Load logs
   const handleLoadLogs = useCallback(async () => {

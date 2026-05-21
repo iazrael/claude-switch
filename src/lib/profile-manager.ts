@@ -2,7 +2,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import lockfile from 'proper-lockfile';
 import { SETTINGS_PATH, PROFILES_PATH, BACKUP_DIR } from './config.js';
-import { backupFile, restoreFile, listBackups, validateType, validateBackupFileName, BackupType, BackupInfo } from './backup.js';
+import { backupFile, restoreFile, listBackups, validateType, validateBackupFileName, BackupType, BackupInfo, parseBackupFileName } from './backup.js';
 import { logAction } from './logger.js';
 import { encrypt, decrypt, needsReEncrypt } from './crypto-utils.js';
 import { diffJSON, DiffOutput } from './diff.js';
@@ -156,7 +156,12 @@ async function saveProfilesSafe(data: ProfileData, reason: string): Promise<void
   for (const name of Object.keys(data.profiles)) {
     encrypted[name] = { env: encryptProfileEnv(data.profiles[name].env) };
   }
-  await backupFile(PROFILES_PATH, reason);
+  // 仅在 profiles 内容发生实际变化时才进行备份，避免仅改变 active 字段时产生冗余备份
+  const currentRaw = await readJSON<{ active?: string; profiles?: Record<string, { env: Record<string, string> }> }>(PROFILES_PATH);
+  const profilesChanged = !currentRaw || JSON.stringify(currentRaw.profiles) !== JSON.stringify(encrypted);
+  if (profilesChanged) {
+    await backupFile(PROFILES_PATH, reason);
+  }
   await writeJSON(PROFILES_PATH, { active: data.active, profiles: encrypted });
 }
 
@@ -279,14 +284,27 @@ export async function switchProfile(name: string): Promise<void> {
     // 合并而非覆盖
     const profileEnv = data.profiles[name].env;
     const changedKeys = Object.keys(profileEnv) as (keyof ClaudeEnv)[];
+    
+    // 检查 settings.env 是否有实际的值变化，避免无变化时产生冗余 settings 备份
+    let settingsChanged = false;
     for (const key of changedKeys) {
-      settings.env[key] = profileEnv[key];
+      if (settings.env[key] !== profileEnv[key]) {
+        settings.env[key] = profileEnv[key];
+        settingsChanged = true;
+      }
     }
-    await backupFile(SETTINGS_PATH, `switch-${name}`);
-    await writeJSON(SETTINGS_PATH, settings);
-    // 更新 active
-    data.active = name;
-    await saveProfilesSafe(data, `switch-${name}`);
+    
+    if (settingsChanged) {
+      await backupFile(SETTINGS_PATH, `switch-${name}`);
+      await writeJSON(SETTINGS_PATH, settings);
+    }
+    
+    // 更新 active 指针，只有当 active 改变时才写入 profiles.json
+    if (data.active !== name) {
+      data.active = name;
+      await saveProfilesSafe(data, `switch-${name}`);
+    }
+    
     await logAction('WRITE_SETTINGS', `切换到套餐 "${name}" (merge ${changedKeys.join(', ')})`);
   });
 }
@@ -416,8 +434,36 @@ export async function restore(type: string, backupFileName: string): Promise<voi
   await logAction('RESTORE', `${type} 从 ${backupFileName} 还原`);
 }
 
+// 检查备份与当前配置是否存在差异
+export async function hasBackupChanges(type: BackupType, fileName: string): Promise<boolean> {
+  // 始终保留系统迁移和还原前备份作为安全恢复断点
+  const info = parseBackupFileName(fileName);
+  if (info.reason === 'migration' || info.reason === 'restore') {
+    return true;
+  }
+  try {
+    const preview = await getBackupPreview(type, fileName);
+    if (type === 'profiles') {
+      const p = preview as PreviewResult;
+      return (p.added?.length || 0) > 0 || (p.removed?.length || 0) > 0 || (p.changed?.length || 0) > 0;
+    } else {
+      const d = preview as DiffOutput;
+      return (d.added?.length || 0) > 0 || (d.removed?.length || 0) > 0 || (d.changed?.length || 0) > 0;
+    }
+  } catch {
+    return true; // 发生读取错误时，保留在列表中
+  }
+}
+
 export async function getBackups(type: BackupType): Promise<BackupInfo[]> {
-  return listBackups(type);
+  const allBackups = await listBackups(type);
+  const results = await Promise.all(
+    allBackups.map(async (b) => {
+      const hasChanges = await hasBackupChanges(type, b.fileName);
+      return { b, hasChanges };
+    })
+  );
+  return results.filter(r => r.hasChanges).map(r => r.b);
 }
 
 export interface PreviewResult {
