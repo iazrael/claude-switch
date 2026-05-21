@@ -157,32 +157,6 @@ describe('Profile Manager', () => {
 
   // ---------- v3.0 新增测试 ----------
 
-  it('旧格式 profiles.json 应自动迁移', async () => {
-    // 手动写入旧格式
-    const oldFormat = {
-      'old-profile': { env: { ANTHROPIC_AUTH_TOKEN: 'sk-old', ANTHROPIC_BASE_URL: 'https://old.com' } },
-    };
-    await fs.writeJson(PROFILES_PATH, oldFormat, { spaces: 2 });
-    // 重置 init 状态并触发迁移
-    manager._resetInit();
-    await manager.init();
-    const data = await manager.getProfiles();
-    expect(data.profiles).toBeDefined();
-    expect(data.profiles['old-profile']).toBeDefined();
-    expect(data.active).toBe('');
-  });
-
-  it('迁移后 active 应为空字符串', async () => {
-    const oldFormat = {
-      'test': { env: { ANTHROPIC_AUTH_TOKEN: 'sk-test', ANTHROPIC_BASE_URL: 'https://test.com' } },
-    };
-    await fs.writeJson(PROFILES_PATH, oldFormat, { spaces: 2 });
-    manager._resetInit();
-    await manager.init();
-    const data = await manager.getProfiles();
-    expect(data.active).toBe('');
-  });
-
   it('getActiveProfile 通过 active 字段识别', async () => {
     await manager.addProfile('active-test', TEST_ENV);
     await manager.switchProfile('active-test');
@@ -250,18 +224,6 @@ describe('Profile Manager', () => {
     await manager.removeProfile('remove-active');
     const active = await manager.getActive();
     expect(active).toBe('');
-  });
-
-  it('迁移应产生 migration 备份', async () => {
-    const oldFormat = {
-      'migration-test': { env: { ANTHROPIC_AUTH_TOKEN: 'sk-mig', ANTHROPIC_BASE_URL: 'https://mig.com' } },
-    };
-    await fs.writeJson(PROFILES_PATH, oldFormat, { spaces: 2 });
-    manager._resetInit();
-    await manager.init();
-    const backups = await manager.getBackups('profiles');
-    const migrationBackup = backups.find(b => b.reason === 'migration');
-    expect(migrationBackup).toBeDefined();
   });
 
   // ---------- v3.3.0 edit & copy ----------

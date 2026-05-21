@@ -93,36 +93,7 @@ function isPlaintext(value: string): boolean {
   return decrypted === value;
 }
 
-// ---------- 迁移 ----------
-
-// 旧格式类型（没有 active 字段）
-type OldFormatProfiles = Record<string, { env: Record<string, string> }>;
-
-// 判断是否为旧格式
-function isOldFormat(raw: unknown): boolean {
-  if (!raw || typeof raw !== 'object') return false;
-  return !('profiles' in raw);
-}
-
-// 迁移旧格式到新格式（在锁内调用）
-async function migrateFormat(raw: ProfileData | OldFormatProfiles | null): Promise<ProfileData> {
-  if (!raw || !isOldFormat(raw)) return raw as ProfileData;
-  // 旧格式：raw 本身就是 { name: { env } } 结构
-  await backupFile(PROFILES_PATH, 'migration');
-  const oldProfiles = raw as OldFormatProfiles;
-  const migrated: ProfileData = { active: '', profiles: keepSensitiveFieldsAsIs(oldProfiles) };
-  await writeJSON(PROFILES_PATH, { active: '', profiles: migrated.profiles });
-  return migrated;
-}
-
-// 迁移时保持敏感字段原样（旧格式数据已经是加密的，不需要再加密）
-function keepSensitiveFieldsAsIs(profiles: OldFormatProfiles): Record<string, Profile> {
-  const result: Record<string, Profile> = {};
-  for (const name of Object.keys(profiles)) {
-    result[name] = { env: { ...(profiles[name].env || {}) } };
-  }
-  return result;
-}
+// ---------- 初始化 ----------
 
 // 迁移旧数据：明文 token 加密 / 重加密（在锁内调用，操作新格式的 profiles 子对象）
 async function migrateIfNeeded(data: ProfileData): Promise<void> {
@@ -190,9 +161,10 @@ export async function init(): Promise<void> {
   if (_initialized) return;
   await withLock(async () => {
     if (_initialized) return;
-    const raw = await readJSON<ProfileData>(PROFILES_PATH);
-    const data = await migrateFormat(raw);
-    await migrateIfNeeded(data);
+    const data = await readJSON<ProfileData>(PROFILES_PATH);
+    if (data) {
+      await migrateIfNeeded(data);
+    }
     _initialized = true;
   });
 }
@@ -485,29 +457,18 @@ export async function getBackupPreview(type: BackupType, fileName: string): Prom
   if (!(await fs.pathExists(backupPath))) {
     throw new Error(`备份文件 ${fileName} 不存在`);
   }
-  const backupData = await readJSON<{ active?: string; profiles?: Record<string, { env: Record<string, string> }> } | { env?: Record<string, string> }>(backupPath);
+  const backupData = await readJSON<{ active?: string; profiles?: Record<string, { env: Record<string, string> }> }>(backupPath);
 
   if (type === 'profiles') {
-    // 当前数据（新格式）
+    // 当前数据
     const currentFull = await getProfilesDecrypted();
     const currentProfiles = currentFull.profiles;
-    // 备份数据：可能旧格式也可能新格式
-    let backupProfiles: Record<string, Profile>;
-    if (backupData && 'profiles' in backupData && backupData.profiles !== undefined) {
-      // 新格式备份
-      backupProfiles = {};
+    // 备份数据
+    const backupProfiles: Record<string, Profile> = {};
+    if (backupData && typeof backupData === 'object' && backupData.profiles) {
       for (const [name, data] of Object.entries(backupData.profiles)) {
-        backupProfiles[name] = { env: decryptProfileEnv(data.env || {}) };
-      }
-    } else {
-      // 旧格式备份
-      backupProfiles = {};
-      const oldProfiles = backupData as Record<string, { env: Record<string, string> }> | null;
-      if (oldProfiles) {
-        for (const [name, data] of Object.entries(oldProfiles)) {
-          if (data && 'env' in data) {
-            backupProfiles[name] = { env: decryptProfileEnv(data.env || {}) };
-          }
+        if (data && typeof data === 'object' && 'env' in data) {
+          backupProfiles[name] = { env: decryptProfileEnv(data.env || {}) };
         }
       }
     }
