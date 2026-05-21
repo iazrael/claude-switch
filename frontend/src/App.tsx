@@ -6,7 +6,6 @@ import { usePresets } from './hooks/usePresets';
 import { useBackups } from './hooks/useBackups';
 import { useLogs } from './hooks/useLogs';
 import { Toast } from './components/Toast';
-import { Modal } from './components/Modal';
 import { DiffTable } from './components/DiffTable';
 import { ProfileItem } from './components/ProfileItem';
 import { BackupItem } from './components/BackupItem';
@@ -22,8 +21,14 @@ function AppContent() {
   const [backupType, setBackupType] = useState<BackupType>('settings');
   const { backups, load: loadBackups, restore, preview } = useBackups(backupType);
 
+  // Active Selected Backup for Inline Diff Preview
+  const [activeBackupFile, setActiveBackupFile] = useState<string>('');
+  const [activeBackupDiff, setActiveBackupDiff] = useState<ProfileDiff | SettingsDiff | null>(null);
+  const [isLoadingDiff, setIsLoadingDiff] = useState<boolean>(false);
+
   const { logs, load: loadLogs } = useLogs();
   const [logDate, setLogDate] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<'workspace' | 'backups' | 'logs'>('workspace');
 
   // Form state
   const [formName, setFormName] = useState('');
@@ -34,18 +39,34 @@ function AppContent() {
   const [formHaiku, setFormHaiku] = useState('');
   const [formPreset, setFormPreset] = useState('');
 
-  // Diff Modal state
-  const [diffModal, setDiffModal] = useState<{ visible: boolean; fileName: string; diff: ProfileDiff | SettingsDiff | null }>({
-    visible: false,
-    fileName: '',
-    diff: null,
-  });
-
   // Initial load
   useEffect(() => {
     loadProfiles();
     loadCurrentEnv();
   }, [loadProfiles, loadCurrentEnv]);
+
+  // Load diagnostic data when tabs change
+  useEffect(() => {
+    if (activeTab === 'backups') {
+      loadBackups().catch(() => {});
+      setActiveBackupFile('');
+      setActiveBackupDiff(null);
+    } else if (activeTab === 'logs') {
+      loadLogs(logDate).catch(() => {});
+    }
+  }, [activeTab, loadBackups, loadLogs, logDate]);
+
+  // Parser to identify log levels for color-coding
+  const parseLogLevel = useCallback((line: string) => {
+    const l = line.toUpperCase();
+    if (l.includes('ERROR') || l.includes('FAIL') || l.includes('EXCEPTION')) {
+      return styles.logError;
+    }
+    if (l.includes('WARN') || l.includes('⚠️')) {
+      return styles.logWarn;
+    }
+    return styles.logInfo;
+  }, []);
 
   // Apply preset template
   const applyPreset = useCallback((key: string) => {
@@ -69,6 +90,18 @@ function AppContent() {
     setFormPreset('');
   }, [setEditingProfile]);
 
+  // Create new profile
+  const handleCreateNew = useCallback(() => {
+    setEditingProfile(null);
+    setFormName('');
+    setFormToken('');
+    setFormBaseUrl('');
+    setFormOpus('');
+    setFormSonnet('');
+    setFormHaiku('');
+    setFormPreset('');
+  }, [setEditingProfile]);
+
   // Edit profile
   const handleEdit = useCallback((name: string) => {
     const profile = profiles[name];
@@ -80,6 +113,13 @@ function AppContent() {
     setFormSonnet(profile.env.ANTHROPIC_DEFAULT_SONNET_MODEL || '');
     setFormHaiku(profile.env.ANTHROPIC_DEFAULT_HAIKU_MODEL || '');
     setFormToken('');
+    // Auto-scroll to form card on small viewports
+    setTimeout(() => {
+      const formEl = document.querySelector(`.${styles.formCard}`);
+      if (formEl) {
+        formEl.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 50);
   }, [profiles, setEditingProfile]);
 
   // Save profile
@@ -172,13 +212,18 @@ function AppContent() {
     }
   }, [loadBackups, showToast]);
 
-  // Preview backup
-  const handlePreviewBackup = useCallback(async (fileName: string) => {
+  // Select backup file for inline preview
+  const handleSelectBackup = useCallback(async (fileName: string) => {
+    setActiveBackupFile(fileName);
+    setIsLoadingDiff(true);
     try {
       const diff = await preview(fileName);
-      setDiffModal({ visible: true, fileName, diff });
+      setActiveBackupDiff(diff);
     } catch (e) {
-      showToast(`加载预览失败: ${(e as Error).message}`);
+      showToast(`加载差异数据失败: ${(e as Error).message}`);
+      setActiveBackupDiff(null);
+    } finally {
+      setIsLoadingDiff(false);
     }
   }, [preview, showToast]);
 
@@ -190,6 +235,8 @@ function AppContent() {
       showToast('还原成功，请重启 Claude Code');
       loadProfiles();
       loadCurrentEnv();
+      setActiveBackupFile('');
+      setActiveBackupDiff(null);
     } catch (e) {
       showToast(`还原失败: ${(e as Error).message}`);
     }
@@ -203,220 +250,531 @@ function AppContent() {
       showToast(`加载日志失败: ${(e as Error).message}`);
     }
   }, [loadLogs, logDate, showToast]);
-
-  // Environment variables text
-  const envText = Object.keys(env).length === 0
-    ? '未配置环境变量'
-    : Object.entries(env).map(([k, v]) => `${k}: ${v}`).join('\n');
-
-  // Current profile display
-  const currentText = activeProfile
-    ? `${activeProfile} (${env.ANTHROPIC_DEFAULT_SONNET_MODEL || ''})${envMismatch ? ' ⚠️ 环境已变更' : ''}`
-    : env.ANTHROPIC_DEFAULT_SONNET_MODEL
-      ? `未知 (${env.ANTHROPIC_DEFAULT_SONNET_MODEL})`
-      : '无';
-
   return (
     <div className={styles.container}>
-      <h1 className={styles.title}>⚡ Claude 套餐管理</h1>
-      <p className={styles.subtitle}>
-        当前生效的套餐：<strong style={{ color: envMismatch ? 'var(--warning)' : 'var(--accent)' }}>{currentText}</strong>
-      </p>
-      <p style={{ color: 'var(--sub)', fontSize: '0.82rem', marginBottom: '12px' }}>
-        💡 切换套餐时仅更新套餐定义的变量，settings.json 中的其他环境变量保持不变。
-      </p>
+      {/* SaaS Premium Top Navigation Bar */}
+      <nav className={styles.navbar}>
+        <div className={styles.navBrand}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="url(#gradient-accent)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 2px 8px rgba(99, 102, 241, 0.4))' }}>
+            <defs>
+              <linearGradient id="gradient-accent" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#6366f1" />
+                <stop offset="100%" stopColor="#8b5cf6" />
+              </linearGradient>
+            </defs>
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg>
+          <h1>Claude Switch</h1>
+        </div>
+        <div className={styles.navTabs}>
+          <button
+            className={`${styles.navTabButton} ${activeTab === 'workspace' ? styles.navTabActive : ''}`}
+            onClick={() => setActiveTab('workspace')}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="9" />
+              <rect x="14" y="3" width="7" height="5" />
+              <rect x="14" y="12" width="7" height="9" />
+              <rect x="3" y="16" width="7" height="5" />
+            </svg>
+            配置工作台
+          </button>
+          <button
+            className={`${styles.navTabButton} ${activeTab === 'backups' ? styles.navTabActive : ''}`}
+            onClick={() => setActiveTab('backups')}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+            备份与恢复
+          </button>
+          <button
+            className={`${styles.navTabButton} ${activeTab === 'logs' ? styles.navTabActive : ''}`}
+            onClick={() => setActiveTab('logs')}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6" />
+              <line x1="8" y1="12" x2="21" y2="12" />
+              <line x1="8" y1="18" x2="21" y2="18" />
+              <line x1="3" y1="6" x2="3.01" y2="6" />
+              <line x1="3" y1="12" x2="3.01" y2="12" />
+              <line x1="3" y1="18" x2="3.01" y2="18" />
+            </svg>
+            系统审计日志
+          </button>
+        </div>
+      </nav>
 
-      {/* Current environment */}
-      <div className={styles.card}>
-        <h2 className={styles.cardTitle}>📍 当前环境变量</h2>
-        <div className={styles.logText} style={{ maxHeight: '150px' }}>{envText}</div>
-      </div>
+      {/* Workspace View */}
+      {activeTab === 'workspace' && (
+        <div className={styles.workspaceLayout}>
+          {/* LEFT: Active Env & Form */}
+          <div className={styles.mainCol}>
+            {/* Active Env Card */}
+            <div className={styles.card}>
+              <h2 className={styles.cardTitle}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                  <line x1="8" y1="21" x2="16" y2="21" />
+                  <line x1="12" y1="17" x2="12" y2="21" />
+                </svg>
+                生效环境变量
+              </h2>
+              <div className={styles.statusTable}>
+                <div className={styles.statusRow}>
+                  <span className={styles.statusKey}>生效套餐</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className={styles.statusValue} style={{ fontWeight: 700, color: envMismatch ? 'var(--warning)' : 'var(--accent)' }}>
+                      {activeProfile || '未知配置'}
+                    </span>
+                    {envMismatch ? (
+                      <span className={`${styles.statusBadge} ${styles.statusMismatchBadge}`}>
+                        环境差异 ⚠️
+                      </span>
+                    ) : (
+                      <span className={styles.statusBadge}>
+                        已激活
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className={styles.statusRow}>
+                  <span className={styles.statusKey}>API Key</span>
+                  <span className={styles.statusValue}>
+                    {env.ANTHROPIC_AUTH_TOKEN ? `sk-••••${env.ANTHROPIC_AUTH_TOKEN.slice(-4)}` : '未配置'}
+                  </span>
+                </div>
+                <div className={styles.statusRow}>
+                  <span className={styles.statusKey}>接口中转 URL</span>
+                  <span className={styles.statusValue} title={env.ANTHROPIC_BASE_URL || '官方默认'}>
+                    {env.ANTHROPIC_BASE_URL || '官方默认'}
+                  </span>
+                </div>
+                <div className={styles.statusRow}>
+                  <span className={styles.statusKey}>Sonnet 模型</span>
+                  <span className={styles.statusValue} title={env.ANTHROPIC_DEFAULT_SONNET_MODEL || '官方默认'}>
+                    {env.ANTHROPIC_DEFAULT_SONNET_MODEL || '官方默认'}
+                  </span>
+                </div>
+                {env.ANTHROPIC_DEFAULT_OPUS_MODEL && (
+                  <div className={styles.statusRow}>
+                    <span className={styles.statusKey}>Opus 模型</span>
+                    <span className={styles.statusValue} title={env.ANTHROPIC_DEFAULT_OPUS_MODEL}>
+                      {env.ANTHROPIC_DEFAULT_OPUS_MODEL}
+                    </span>
+                  </div>
+                )}
+                {env.ANTHROPIC_DEFAULT_HAIKU_MODEL && (
+                  <div className={styles.statusRow}>
+                    <span className={styles.statusKey}>Haiku 模型</span>
+                    <span className={styles.statusValue} title={env.ANTHROPIC_DEFAULT_HAIKU_MODEL}>
+                      {env.ANTHROPIC_DEFAULT_HAIKU_MODEL}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
 
-      {/* Profile list */}
-      <div className={styles.card}>
-        <h2 className={styles.cardTitle}>📦 已保存的套餐</h2>
-        <div className={styles.profileList}>
-          {Object.keys(profiles).length === 0 ? (
-            <div className={styles.emptyState}>暂无套餐，请在下方添加</div>
+            {/* Inline Config Form Card */}
+            <div className={`${styles.formCard} ${editingProfile ? styles.formActiveBorder : ''}`}>
+              <h2 className={styles.cardTitle}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+                {editingProfile ? `编辑套餐配置: ${editingProfile}` : '创建新配置套餐'}
+              </h2>
+
+              <div className={styles.formGroup}>
+                <label className={styles.label}>厂商套餐模板（快速填充）</label>
+                <select
+                  className={styles.input}
+                  value={formPreset}
+                  onChange={(e) => {
+                    setFormPreset(e.target.value);
+                    applyPreset(e.target.value);
+                  }}
+                >
+                  <option value="">-- 手动填写表单 --</option>
+                  {Object.entries(presets).map(([key, p]) => (
+                    <option key={key} value={key}>{p.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className={styles.formGroup}>
+                <label className={styles.label}>套餐名称</label>
+                <input
+                  className={styles.input}
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  placeholder="如: deepseek-pro, aliyun-opus"
+                  disabled={!!editingProfile}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label className={styles.label}>API Key (授权令牌)</label>
+                <input
+                  className={styles.input}
+                  type="password"
+                  value={formToken}
+                  onChange={(e) => setFormToken(e.target.value)}
+                  placeholder={editingProfile ? '保持不变（留空代表不修改原 Key）' : 'sk-...'}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label className={styles.label}>Base URL (接口中转网关)</label>
+                <input
+                  className={styles.input}
+                  value={formBaseUrl}
+                  onChange={(e) => setFormBaseUrl(e.target.value)}
+                  placeholder="https://api.anthropic.com (留空则默认为官方)"
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>Opus 模型</label>
+                  <input
+                    className={styles.input}
+                    value={formOpus}
+                    onChange={(e) => setFormOpus(e.target.value)}
+                    placeholder="claude-3-opus-..."
+                  />
+                </div>
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>Sonnet 模型</label>
+                  <input
+                    className={styles.input}
+                    value={formSonnet}
+                    onChange={(e) => setFormSonnet(e.target.value)}
+                    placeholder="claude-3-5-sonnet-..."
+                  />
+                </div>
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>Haiku 模型</label>
+                  <input
+                    className={styles.input}
+                    value={formHaiku}
+                    onChange={(e) => setFormHaiku(e.target.value)}
+                    placeholder="claude-3-5-haiku-..."
+                  />
+                </div>
+              </div>
+
+              <div className={styles.row} style={{ borderTop: '1px solid var(--border)', paddingTop: '18px', marginTop: '18px' }}>
+                <button className={`${styles.btn} ${styles.btnOutline}`} onClick={clearForm}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                  取消
+                </button>
+                
+                {editingProfile && (
+                  <button className={`${styles.btn} ${styles.btnOutline}`} onClick={handleSaveAs}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                    另存为新套餐
+                  </button>
+                )}
+
+                <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleSave} style={{ marginLeft: 'auto' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                    <polyline points="17 21 17 13 7 13 7 21" />
+                    <polyline points="7 3 7 8 15 8" />
+                  </svg>
+                  保存套餐
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT: Saved Profiles Grid */}
+          <div className={styles.sideCol}>
+            <div className={styles.card} style={{ minHeight: '500px' }}>
+              <div className={styles.cardHeader}>
+                <h2 className={styles.cardTitle}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="7" height="9" />
+                    <rect x="14" y="3" width="7" height="5" />
+                    <rect x="14" y="12" width="7" height="9" />
+                    <rect x="3" y="16" width="7" height="5" />
+                  </svg>
+                  已保存的套餐库
+                </h2>
+                {!editingProfile && (
+                  <button className={`${styles.btn} ${styles.btnPrimary} ${styles.btnSm}`} onClick={handleCreateNew}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                    新建套餐
+                  </button>
+                )}
+              </div>
+              
+              <div className={styles.profileList}>
+                {Object.keys(profiles).length === 0 ? (
+                  <div className={styles.emptyState}>
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <line x1="9" y1="9" x2="15" y2="9" />
+                      <line x1="9" y1="13" x2="15" y2="13" />
+                      <line x1="9" y1="17" x2="15" y2="17" />
+                    </svg>
+                    暂无保存的套餐，请在左侧面板创建您的第一个配置套餐
+                  </div>
+                ) : (
+                  Object.entries(profiles).map(([name, profile]) => (
+                    <ProfileItem
+                      key={name}
+                      name={name}
+                      env={profile.env}
+                      isCurrent={name === active}
+                      mismatch={name === active && mismatch}
+                      onSwitch={() => handleSwitch(name)}
+                      onEdit={() => handleEdit(name)}
+                      onDelete={() => handleDelete(name)}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Backups & Revert View */}
+      {activeTab === 'backups' && (
+        <div className={styles.diagnosticsLayout}>
+          {/* Left: Backup list */}
+          <div className={styles.card}>
+            <h2 className={styles.cardTitle}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+              历史备份管理
+            </h2>
+            <p style={{ fontSize: '0.85rem', color: 'var(--sub)', marginBottom: '16px' }}>
+              系统在每次写入/修改底层配置文件时，均会自动创建双层安全备份。
+            </p>
+            
+            <div className={styles.row} style={{ marginBottom: '18px' }}>
+              <select
+                className={styles.input}
+                style={{ flex: 1, padding: '9px 12px' }}
+                value={backupType}
+                onChange={(e) => {
+                  setBackupType(e.target.value as BackupType);
+                  setActiveBackupFile('');
+                  setActiveBackupDiff(null);
+                }}
+              >
+                <option value="settings">settings.json (系统环境底层备份)</option>
+                <option value="profiles">profiles.json (保存套餐数据备份)</option>
+              </select>
+              
+              <button className={`${styles.btn} ${styles.btnOutline}`} onClick={handleLoadBackups}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                </svg>
+                重载列表
+              </button>
+            </div>
+
+            <div className={styles.terminalContainer}>
+              <div className={styles.terminalHeader}>
+                <div className={styles.terminalControls}>
+                  <span className={`${styles.terminalDot} ${styles.dotRed}`}></span>
+                  <span className={`${styles.terminalDot} ${styles.dotYellow}`}></span>
+                  <span className={`${styles.terminalDot} ${styles.dotGreen}`}></span>
+                </div>
+                <div className={styles.terminalTitle}>backups_list.db</div>
+              </div>
+              <div className={styles.logText} style={{ maxHeight: '420px', padding: 0 }}>
+                {backups.length === 0 ? (
+                  <div className={styles.emptyState}>
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
+                      <path d="M12 12v9M8 17l4 4 4-4" />
+                    </svg>
+                    <span>无可用备份记录，点击右上角「重载列表」再次检索</span>
+                  </div>
+                ) : (
+                  backups.map((b) => (
+                    <BackupItem
+                      key={b.fileName}
+                      fileName={b.fileName}
+                      reason={b.reason}
+                      isSelected={b.fileName === activeBackupFile}
+                      onClick={() => handleSelectBackup(b.fileName)}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Selected Backup Diff OR Guide Card */}
+          {activeBackupFile ? (
+            <div className={styles.card}>
+              <h2 className={styles.cardTitle}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v1" />
+                  <path d="M18 8h4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-4" />
+                  <line x1="8" y1="10" x2="8" y2="14" />
+                  <line x1="6" y1="12" x2="10" y2="12" />
+                </svg>
+                备份参数 Diff 差异对比: {activeBackupFile}
+              </h2>
+              
+              <div style={{ marginTop: '16px', marginBottom: '24px' }}>
+                {isLoadingDiff ? (
+                  <div className={styles.emptyState}>
+                    <div className={styles.spinner} />
+                    <span>正在加载差异数据...</span>
+                  </div>
+                ) : activeBackupDiff ? (
+                  <div style={{ maxHeight: '420px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '16px', background: 'var(--bg)' }}>
+                    <DiffModalContent diff={activeBackupDiff} type={backupType} />
+                  </div>
+                ) : (
+                  <div className={styles.emptyState}>无法读取差异数据</div>
+                )}
+              </div>
+
+              {activeBackupDiff && (
+                <div className={styles.row} style={{ justifyContent: 'flex-end', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+                  <button 
+                    className={`${styles.btn} ${styles.btnDanger}`} 
+                    onClick={() => handleRestoreBackup(activeBackupFile)}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="23 4 23 10 17 10" />
+                      <polyline points="1 20 1 14 7 14" />
+                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                    </svg>
+                    确认还原此备份
+                  </button>
+                </div>
+              )}
+            </div>
           ) : (
-            Object.entries(profiles).map(([name, profile]) => (
-              <ProfileItem
-                key={name}
-                name={name}
-                env={profile.env}
-                isCurrent={name === active}
-                mismatch={name === active && mismatch}
-                onSwitch={() => handleSwitch(name)}
-                onEdit={() => handleEdit(name)}
-                onDelete={() => handleDelete(name)}
-              />
-            ))
+            <div className={styles.card}>
+              <h2 className={styles.cardTitle}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="16" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+                数据恢复说明指南
+              </h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontSize: '0.9rem', lineHeight: '1.6', color: 'var(--sub)' }}>
+                <div style={{ background: 'var(--accent-light)', padding: '14px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(99, 102, 241, 0.1)', color: 'var(--text)', fontWeight: 500 }}>
+                  请从左侧列表选择一个备份文件，系统将在此处自动加载该备份与当前环境的详细参数 Diff 差异对比，并提供一键安全还原控制。
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--text)' }}>1. 什么是底层备份?</strong>
+                  <p>每次激活新套餐时，程序会自动备份 Claude Code 底层原始的 `settings.json` 文件。在极端配置损坏时，可一键复原出厂设置。</p>
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--text)' }}>2. 如何验证备份?</strong>
+                  <p>选择备份文件后，右侧卡片会为您渲染出直观易读的 Diff 差异对比，绿色代表新增参数，红色代表已删除的原有参数。</p>
+                </div>
+                <div style={{ background: 'var(--accent-light)', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(99, 102, 241, 0.1)' }}>
+                  <strong style={{ color: 'var(--accent)', display: 'block', marginBottom: '4px' }}>💡 提示</strong>
+                  恢复操作是 100% 安全且可以随时回滚的，恢复前系统会自动再次为当前状态生成快照。
+                </div>
+              </div>
+            </div>
           )}
         </div>
-      </div>
+      )}
 
-      {/* Add/Edit profile form */}
-      <div className={styles.card}>
-        <h2 className={styles.cardTitle}>➕ 添加 / 编辑套餐</h2>
-        <div className={styles.formGroup}>
-          <label className={styles.label}>厂商模板（可选）</label>
-          <select
-            className={styles.input}
-            value={formPreset}
-            onChange={(e) => {
-              setFormPreset(e.target.value);
-              applyPreset(e.target.value);
-            }}
-          >
-            <option value="">-- 手动填写 --</option>
-            {Object.entries(presets).map(([key, p]) => (
-              <option key={key} value={key}>{p.label}</option>
-            ))}
-          </select>
-        </div>
-        <div className={styles.formGroup}>
-          <label className={styles.label}>套餐名称</label>
-          <input
-            className={styles.input}
-            value={formName}
-            onChange={(e) => setFormName(e.target.value)}
-            placeholder="如 aliyun-pro"
-            disabled={!!editingProfile}
-          />
-        </div>
-        <div className={styles.formGroup}>
-          <label className={styles.label}>API Key</label>
-          <input
-            className={styles.input}
-            type="password"
-            value={formToken}
-            onChange={(e) => setFormToken(e.target.value)}
-            placeholder={editingProfile ? '保持不变（留空不修改）' : 'sk-...'}
-          />
-        </div>
-        <div className={styles.formGroup}>
-          <label className={styles.label}>Base URL</label>
-          <input
-            className={styles.input}
-            value={formBaseUrl}
-            onChange={(e) => setFormBaseUrl(e.target.value)}
-            placeholder="https://..."
-          />
-        </div>
-        <div className={styles.formGroup}>
-          <label className={styles.label}>Opus 模型</label>
-          <input
-            className={styles.input}
-            value={formOpus}
-            onChange={(e) => setFormOpus(e.target.value)}
-            placeholder="复杂任务模型"
-          />
-        </div>
-        <div className={styles.formGroup}>
-          <label className={styles.label}>Sonnet 模型</label>
-          <input
-            className={styles.input}
-            value={formSonnet}
-            onChange={(e) => setFormSonnet(e.target.value)}
-            placeholder="日常主力模型"
-          />
-        </div>
-        <div className={styles.formGroup}>
-          <label className={styles.label}>Haiku 模型</label>
-          <input
-            className={styles.input}
-            value={formHaiku}
-            onChange={(e) => setFormHaiku(e.target.value)}
-            placeholder="轻量任务模型"
-          />
-        </div>
-        <div className={styles.row}>
-          <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleSave}>保存套餐</button>
-          {editingProfile && (
-            <button className={`${styles.btn} ${styles.btnOutline}`} onClick={handleSaveAs}>另存为新套餐</button>
-          )}
-          <button className={`${styles.btn} ${styles.btnOutline}`} onClick={clearForm}>清空表单</button>
-        </div>
-        <p className={styles.hint}>编辑已有套餐请先点击列表中的 ✏️ 按钮</p>
-      </div>
+      {/* Logs View */}
+      {activeTab === 'logs' && (
+        <div className={styles.logsLayout}>
+          <div className={styles.card}>
+            <div className={styles.cardHeader}>
+              <h2 className={styles.cardTitle}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="8" y1="6" x2="21" y2="6" />
+                  <line x1="8" y1="12" x2="21" y2="12" />
+                  <line x1="8" y1="18" x2="21" y2="18" />
+                  <line x1="3" y1="6" x2="3.01" y2="6" />
+                  <line x1="3" y1="12" x2="3.01" y2="12" />
+                  <line x1="3" y1="18" x2="3.01" y2="18" />
+                </svg>
+                运行审计日志流
+              </h2>
+              
+              <div className={styles.row} style={{ margin: 0 }}>
+                <input
+                  className={styles.input}
+                  type="date"
+                  style={{ width: '160px', padding: '8px 12px' }}
+                  value={logDate}
+                  onChange={(e) => setLogDate(e.target.value)}
+                />
+                <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleLoadLogs}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                  检索日志
+                </button>
+              </div>
+            </div>
 
-      {/* Backup and restore */}
-      <div className={styles.card}>
-        <h2 className={styles.cardTitle}>⏪ 备份与还原</h2>
-        <div className={styles.row} style={{ marginBottom: '12px' }}>
-          <select
-            className={styles.input}
-            style={{ flex: 1 }}
-            value={backupType}
-            onChange={(e) => setBackupType(e.target.value as BackupType)}
-          >
-            <option value="settings">settings.json 备份</option>
-            <option value="profiles">profiles.json 备份</option>
-          </select>
-          <button className={`${styles.btn} ${styles.btnOutline}`} onClick={handleLoadBackups}>查看备份</button>
+            <div className={styles.logsTerminal}>
+              <div className={styles.terminalHeader}>
+                <div className={styles.terminalControls}>
+                  <span className={`${styles.terminalDot} ${styles.dotRed}`}></span>
+                  <span className={`${styles.terminalDot} ${styles.dotYellow}`}></span>
+                  <span className={`${styles.terminalDot} ${styles.dotGreen}`}></span>
+                </div>
+                <div className={styles.terminalTitle}>operation_audit.log</div>
+              </div>
+              <div style={{ maxHeight: '600px', overflowY: 'auto', background: 'var(--terminal-bg)' }}>
+                {logs.length === 0 ? (
+                  <div className={styles.emptyState}>
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    <span>暂无日志记录，选择特定日期并点击「检索日志」</span>
+                  </div>
+                ) : (
+                  logs.flatMap((logGroup) => {
+                    const lines = logGroup.content.split('\n').filter(Boolean);
+                    return lines.map((line, idx) => {
+                      const levelClass = parseLogLevel(line);
+                      return (
+                        <div key={`${logGroup.date}-${idx}`} className={`${styles.logRow} ${levelClass}`}>
+                          <span className={styles.logTime}>{logGroup.date}</span>
+                          <span className={styles.logContent}>{line}</span>
+                        </div>
+                      );
+                    });
+                  })
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-        <div className={styles.logText} style={{ maxHeight: '200px' }}>
-          {backups.length === 0 ? '点击「查看备份」加载' : backups.map((b) => (
-            <BackupItem
-              key={b.fileName}
-              fileName={b.fileName}
-              reason={b.reason}
-              onPreview={() => handlePreviewBackup(b.fileName)}
-              onRestore={() => handleRestoreBackup(b.fileName)}
-            />
-          ))}
-        </div>
-      </div>
+      )}
 
-      {/* Operation logs */}
-      <div className={styles.card}>
-        <h2 className={styles.cardTitle}>📋 操作日志</h2>
-        <div className={styles.row} style={{ marginBottom: '12px' }}>
-          <input
-            className={styles.input}
-            type="date"
-            style={{ flex: 1 }}
-            value={logDate}
-            onChange={(e) => setLogDate(e.target.value)}
-          />
-          <button className={`${styles.btn} ${styles.btnOutline}`} onClick={handleLoadLogs}>查询日志</button>
-        </div>
-        <div className={styles.logText}>
-          {logs.length === 0
-            ? '选择日期后点击查询'
-            : logs.map((l) => `📅 ${l.date}\n${l.content}`).join('\n\n')}
-        </div>
-      </div>
-
-      {/* Toast */}
+      {/* Toast popup */}
       <Toast message={toast.message} visible={toast.visible} />
 
-      {/* Diff Modal */}
-      {diffModal.visible && diffModal.diff && (
-        <Modal
-          title={`Diff 预览: ${diffModal.fileName}`}
-          onClose={() => setDiffModal({ visible: false, fileName: '', diff: null })}
-        >
-          <DiffModalContent diff={diffModal.diff} type={backupType} />
-          <div className={styles.row} style={{ justifyContent: 'flex-end', marginTop: '16px' }}>
-            <button
-              className={`${styles.btn} ${styles.btnOutline}`}
-              onClick={() => setDiffModal({ visible: false, fileName: '', diff: null })}
-            >
-              取消
-            </button>
-            <button
-              className={`${styles.btn} ${styles.btnDanger}`}
-              onClick={() => {
-                setDiffModal({ visible: false, fileName: '', diff: null });
-                handleRestoreBackup(diffModal.fileName);
-              }}
-            >
-              确认还原
-            </button>
-          </div>
-        </Modal>
-      )}
+
     </div>
   );
 }

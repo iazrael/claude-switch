@@ -2,31 +2,55 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.85rem;
-  padding: 6px 0;
+  font-size: 0.82rem;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
+  transition: var(--transition);
+  background: transparent;
 }
 
-.backupItem:lastChild {
+.backupItem:hover {
+  background: var(--accent-light);
+}
+
+.backupItem:last-child {
   border-bottom: none;
-}
-
-.backupReason {
-  font-size: 0.75rem;
-  color: var(--accent);
-  margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: rgba(99, 102, 241, 0.1);
 }
 
 .backupLeft {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+  min-width: 0;
+}
+
+.backupName {
+  font-family: var(--font-mono);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backupReason {
+  font-size: 0.72rem;
+  color: var(--accent);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--accent-light);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  white-space: nowrap;
 }
 
 .backupButtons {
   display: flex;
-  gap: 4px;
+  gap: 6px;
+  margin-left: 12px;
+}
+
+.backupSelected {
+  background: var(--accent-light) !important;
+  border-left: 3px solid var(--accent);
+  padding-left: 11px; /* Adjust padding to compensate for border-left */
 }
