@@ -643,7 +643,7 @@ function AppContent() {
                     <span>正在加载差异数据...</span>
                   </div>
                 ) : activeBackupDiff ? (
-                  <div style={{ maxHeight: '420px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '16px', background: 'var(--bg)' }}>
+                  <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '16px', background: 'var(--bg)' }}>
                     <DiffModalContent diff={activeBackupDiff} type={backupType} />
                   </div>
                 ) : (
@@ -785,40 +785,235 @@ function AppContent() {
 function DiffModalContent({ diff, type }: { diff: ProfileDiff | SettingsDiff; type: BackupType }) {
   if (type === 'profiles' && 'added' in diff) {
     const profileDiff = diff as ProfileDiff;
-    const parts: string[] = [];
-    if (profileDiff.added.length) parts.push(`新增: ${profileDiff.added.join(', ')}`);
-    if (profileDiff.removed.length) parts.push(`删除: ${profileDiff.removed.join(', ')}`);
-    if (profileDiff.changed.length) parts.push(`变更: ${profileDiff.changed.map(c => c.profile).join(', ')}`);
-    if (profileDiff.unchanged.length) parts.push(`未变: ${profileDiff.unchanged.join(', ')}`);
+    const addedCount = profileDiff.added?.length || 0;
+    const removedCount = profileDiff.removed?.length || 0;
+    const changedCount = profileDiff.changed?.length || 0;
+    const unchangedCount = profileDiff.unchanged?.length || 0;
 
     return (
-      <>
-        <div style={{ marginBottom: '12px', fontSize: '0.85rem', color: 'var(--sub)' }}>
-          {parts.join(' | ') || '无差异'}
-        </div>
-        {profileDiff.changed.map((ch) => (
-          <div key={ch.profile} style={{ marginBottom: '10px' }}>
-            <div style={{ fontWeight: 600, marginBottom: '4px' }}>套餐: {ch.profile}</div>
-            <DiffTable changes={ch.changes} />
+      <div className={styles.diffDashboard}>
+        {/* Metric cards grid */}
+        <div className={styles.diffSummaryGrid}>
+          <div className={`${styles.diffSummaryCard} ${styles.diffCardAdded}`}>
+            <span className={`${styles.diffCount} ${styles.diffCountAdded}`}>+{addedCount}</span>
+            <span className={styles.diffLabel}>新增套餐</span>
           </div>
-        ))}
-      </>
+          <div className={`${styles.diffSummaryCard} ${styles.diffCardRemoved}`}>
+            <span className={`${styles.diffCount} ${styles.diffCountRemoved}`}>-{removedCount}</span>
+            <span className={styles.diffLabel}>删除套餐</span>
+          </div>
+          <div className={`${styles.diffSummaryCard} ${styles.diffCardChanged}`}>
+            <span className={`${styles.diffCount} ${styles.diffCountChanged}`}>~{changedCount}</span>
+            <span className={styles.diffLabel}>变更套餐</span>
+          </div>
+          <div className={`${styles.diffSummaryCard} ${styles.diffCardUnchanged}`}>
+            <span className={`${styles.diffCount} ${styles.diffCountUnchanged}`}>{unchangedCount}</span>
+            <span className={styles.diffLabel}>未变套餐</span>
+          </div>
+        </div>
+
+        {/* Added profiles */}
+        {addedCount > 0 && (
+          <div className={styles.diffSection}>
+            <div className={styles.diffSectionTitle}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>新增套餐</span>
+            </div>
+            <div className={styles.diffBadgeGrid}>
+              {profileDiff.added.map(name => (
+                <span key={name} className={`${styles.diffBadge} ${styles.badgeAdded}`}>{name}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Removed profiles */}
+        {removedCount > 0 && (
+          <div className={styles.diffSection}>
+            <div className={styles.diffSectionTitle}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>删除套餐</span>
+            </div>
+            <div className={styles.diffBadgeGrid}>
+              {profileDiff.removed.map(name => (
+                <span key={name} className={`${styles.diffBadge} ${styles.badgeRemoved}`}>{name}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Changed profiles with detailed tables */}
+        {changedCount > 0 && (
+          <div className={styles.diffSection}>
+            <div className={styles.diffSectionTitle}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+              </svg>
+              <span>变更套餐详情</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {profileDiff.changed.map((ch) => (
+                <div key={ch.profile} className={styles.changedProfileCard}>
+                  <div className={styles.changedProfileHeader}>
+                    <div className={styles.changedProfileTitle}>
+                      <span className={styles.changedProfileDot}></span>
+                      <span>套餐: {ch.profile}</span>
+                    </div>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--warning)', fontWeight: 600 }}>检测到配置变更</span>
+                  </div>
+                  <div className={styles.changedProfileTableWrapper}>
+                    <DiffTable changes={ch.changes} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Unchanged profiles collapsed */}
+        {unchangedCount > 0 && (
+          <details className={styles.diffDetails}>
+            <summary className={styles.diffSummary}>
+              <div className={styles.diffSummaryText}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path>
+                  <path d="M22 12H2"></path>
+                </svg>
+                <span>未变套餐 ({unchangedCount})</span>
+              </div>
+              <svg className={styles.diffSummaryIcon} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </summary>
+            <div className={styles.diffDetailsContent}>
+              <div className={styles.diffBadgeGrid}>
+                {profileDiff.unchanged.map(name => (
+                  <span key={name} className={`${styles.diffBadge} ${styles.badgeUnchanged}`}>{name}</span>
+                ))}
+              </div>
+            </div>
+          </details>
+        )}
+      </div>
     );
   } else {
+    // Settings diff
     const settingsDiff = diff as SettingsDiff;
-    const parts: string[] = [];
-    if (settingsDiff.added?.length) parts.push(`新增: ${settingsDiff.added.join(', ')}`);
-    if (settingsDiff.removed?.length) parts.push(`删除: ${settingsDiff.removed.join(', ')}`);
-    if (settingsDiff.changed?.length) parts.push(`变更: ${settingsDiff.changed.length} 项`);
-    if (settingsDiff.unchanged?.length) parts.push(`未变: ${settingsDiff.unchanged.length} 项`);
+    const addedCount = settingsDiff.added?.length || 0;
+    const removedCount = settingsDiff.removed?.length || 0;
+    const changedCount = settingsDiff.changed?.length || 0;
+    const unchangedCount = settingsDiff.unchanged?.length || 0;
 
     return (
-      <>
-        <div style={{ marginBottom: '8px', fontSize: '0.85rem', color: 'var(--sub)' }}>
-          {parts.join(' | ') || '无差异'}
+      <div className={styles.diffDashboard}>
+        {/* Metric cards grid */}
+        <div className={styles.diffSummaryGrid}>
+          <div className={`${styles.diffSummaryCard} ${styles.diffCardAdded}`}>
+            <span className={`${styles.diffCount} ${styles.diffCountAdded}`}>+{addedCount}</span>
+            <span className={styles.diffLabel}>新增项</span>
+          </div>
+          <div className={`${styles.diffSummaryCard} ${styles.diffCardRemoved}`}>
+            <span className={`${styles.diffCount} ${styles.diffCountRemoved}`}>-{removedCount}</span>
+            <span className={styles.diffLabel}>删除项</span>
+          </div>
+          <div className={`${styles.diffSummaryCard} ${styles.diffCardChanged}`}>
+            <span className={`${styles.diffCount} ${styles.diffCountChanged}`}>~{changedCount}</span>
+            <span className={styles.diffLabel}>变更项</span>
+          </div>
+          <div className={`${styles.diffSummaryCard} ${styles.diffCardUnchanged}`}>
+            <span className={`${styles.diffCount} ${styles.diffCountUnchanged}`}>{unchangedCount}</span>
+            <span className={styles.diffLabel}>未变项</span>
+          </div>
         </div>
-        {settingsDiff.changed && <DiffTable changes={settingsDiff.changed} />}
-      </>
+
+        {/* Added settings keys */}
+        {addedCount > 0 && (
+          <div className={styles.diffSection}>
+            <div className={styles.diffSectionTitle}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>新增配置项</span>
+            </div>
+            <div className={styles.diffBadgeGrid}>
+              {settingsDiff.added?.map(name => (
+                <span key={name} className={`${styles.diffBadge} ${styles.badgeAdded}`}>{name}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Removed settings keys */}
+        {removedCount > 0 && (
+          <div className={styles.diffSection}>
+            <div className={styles.diffSectionTitle}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>删除配置项</span>
+            </div>
+            <div className={styles.diffBadgeGrid}>
+              {settingsDiff.removed?.map(name => (
+                <span key={name} className={`${styles.diffBadge} ${styles.badgeRemoved}`}>{name}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Detailed changed settings table */}
+        {changedCount > 0 && settingsDiff.changed && (
+          <div className={styles.diffSection}>
+            <div className={styles.diffSectionTitle}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+              </svg>
+              <span>变更明细表</span>
+            </div>
+            <div className={styles.changedProfileCard}>
+              <div className={styles.changedProfileHeader}>
+                <div className={styles.changedProfileTitle}>
+                  <span className={styles.changedProfileDot}></span>
+                  <span>全局配置 (settings.json)</span>
+                </div>
+              </div>
+              <div className={styles.changedProfileTableWrapper}>
+                <DiffTable changes={settingsDiff.changed} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Unchanged settings collapsed */}
+        {unchangedCount > 0 && (
+          <details className={styles.diffDetails}>
+            <summary className={styles.diffSummary}>
+              <div className={styles.diffSummaryText}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path>
+                  <path d="M22 12H2"></path>
+                </svg>
+                <span>未变配置项 ({unchangedCount})</span>
+              </div>
+              <svg className={styles.diffSummaryIcon} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </summary>
+            <div className={styles.diffDetailsContent}>
+              <div className={styles.diffBadgeGrid}>
+                {settingsDiff.unchanged?.map(name => (
+                  <span key={name} className={`${styles.diffBadge} ${styles.badgeUnchanged}`}>{name}</span>
+                ))}
+              </div>
+            </div>
+          </details>
+        )}
+      </div>
     );
   }
 }

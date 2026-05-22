@@ -820,3 +820,267 @@ select.input {
     transform: rotate(360deg);
   }
 }
+
+/* ==========================================
+   Backup Diff Dashboard & Cards Overhaul
+   ========================================== */
+
+.diffDashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.diffSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.diffSummaryCard {
+  padding: 12px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--card);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 4px;
+  transition: var(--transition);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.diffSummaryCard:hover {
+  transform: translateY(-1px);
+}
+
+.diffCardAdded {
+  border-color: rgba(16, 185, 129, 0.15);
+  background: rgba(16, 185, 129, 0.02);
+}
+@media (prefers-color-scheme: dark) {
+  .diffCardAdded {
+    border-color: rgba(52, 211, 153, 0.25);
+    background: rgba(52, 211, 153, 0.04);
+  }
+}
+
+.diffCardRemoved {
+  border-color: rgba(239, 68, 68, 0.15);
+  background: rgba(239, 68, 68, 0.02);
+}
+@media (prefers-color-scheme: dark) {
+  .diffCardRemoved {
+    border-color: rgba(248, 113, 113, 0.25);
+    background: rgba(248, 113, 113, 0.04);
+  }
+}
+
+.diffCardChanged {
+  border-color: rgba(245, 158, 11, 0.15);
+  background: rgba(245, 158, 11, 0.02);
+}
+@media (prefers-color-scheme: dark) {
+  .diffCardChanged {
+    border-color: rgba(251, 191, 36, 0.25);
+    background: rgba(251, 191, 36, 0.04);
+  }
+}
+
+.diffCardUnchanged {
+  border-color: var(--border);
+  background: var(--bg);
+}
+
+.diffCount {
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.1;
+  font-family: var(--font-mono);
+}
+
+.diffCountAdded {
+  color: var(--success);
+}
+.diffCountRemoved {
+  color: var(--danger);
+}
+.diffCountChanged {
+  color: var(--warning);
+}
+.diffCountUnchanged {
+  color: var(--sub);
+}
+
+.diffLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--sub);
+}
+
+.diffSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.diffSectionTitle {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sub);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.diffBadgeGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.diffBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  border: 1px solid transparent;
+  transition: var(--transition);
+}
+
+.badgeAdded {
+  background: rgba(16, 185, 129, 0.08);
+  color: var(--success);
+  border-color: rgba(16, 185, 129, 0.15);
+}
+.badgeAdded::before {
+  content: '+';
+  font-weight: 800;
+  font-size: 0.8rem;
+}
+
+.badgeRemoved {
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.15);
+}
+.badgeRemoved::before {
+  content: '−';
+  font-weight: 800;
+  font-size: 0.8rem;
+}
+
+.badgeUnchanged {
+  background: var(--bg);
+  color: var(--sub);
+  border-color: var(--border);
+  font-weight: 500;
+}
+
+.changedProfileCard {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  overflow: hidden;
+  transition: var(--transition);
+}
+
+.changedProfileCard:hover {
+  border-color: rgba(245, 158, 11, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+.changedProfileHeader {
+  padding: 10px 14px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.82rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.changedProfileTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+
+.changedProfileDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--warning);
+  box-shadow: 0 0 8px var(--warning);
+}
+
+.changedProfileTableWrapper {
+  padding: 12px;
+  overflow-x: auto;
+}
+
+.diffDetails {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  overflow: hidden;
+  transition: var(--transition);
+}
+
+.diffDetails[open] {
+  border-color: var(--sub);
+}
+
+.diffSummary {
+  cursor: pointer;
+  padding: 10px 14px;
+  background: var(--bg);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+  list-style: none; /* Hide default chevron */
+  outline: none;
+}
+
+.diffSummary::-webkit-details-marker {
+  display: none; /* Hide default chevron for Safari */
+}
+
+.diffSummaryText {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.diffSummaryIcon {
+  width: 14px;
+  height: 14px;
+  color: var(--sub);
+  transition: transform 0.2s ease;
+}
+
+.diffDetails[open] .diffSummaryIcon {
+  transform: rotate(90deg);
+}
+
+.diffDetailsContent {
+  padding: 14px;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+}
