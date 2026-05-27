@@ -398,6 +398,14 @@ select.input {
   border-radius: 6px;
 }
 
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+  pointer-events: none;
+}
+
 /* Tech Terminal Styles */
 .terminalContainer {
   border-radius: var(--radius-sm);

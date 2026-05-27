@@ -9,6 +9,7 @@ import { Toast } from './components/Toast';
 import { DiffTable } from './components/DiffTable';
 import { ProfileItem } from './components/ProfileItem';
 import { BackupItem } from './components/BackupItem';
+import { CustomDialog } from './components/CustomDialog';
 import styles from './styles/App.module.css';
 import type { BackupType, ProfileDiff, SettingsDiff, ClaudeEnv } from './types/api';
 
@@ -17,6 +18,42 @@ function AppContent() {
   const { profiles, active, mismatch, load: loadProfiles, switchTo, add, update, remove, clone } = useProfiles();
   const { env, activeProfile, mismatch: envMismatch, load: loadCurrentEnv } = useCurrentEnv();
   const { presets } = usePresets();
+
+  // Dialog state
+  const [dialogConfig, setDialogConfig] = useState<{
+    isOpen: boolean;
+    type: 'prompt' | 'confirm';
+    title: string;
+    message: string;
+    defaultValue?: string;
+    placeholder?: string;
+    confirmText?: string;
+    cancelText?: string;
+    intent?: 'primary' | 'danger' | 'warning';
+    onConfirm: (val?: string) => void;
+    onClose: () => void;
+  } | null>(null);
+
+  const showConfirm = useCallback((title: string, message: string, intent: 'primary' | 'danger' | 'warning' = 'primary', confirmText = '确认') => {
+    return new Promise<boolean>((resolve) => {
+      setDialogConfig({
+        isOpen: true,
+        type: 'confirm',
+        title,
+        message,
+        confirmText,
+        intent,
+        onConfirm: () => {
+          setDialogConfig(null);
+          resolve(true);
+        },
+        onClose: () => {
+          setDialogConfig(null);
+          resolve(false);
+        }
+      });
+    });
+  }, []);
 
   const [backupType, setBackupType] = useState<BackupType>('settings');
   const { backups, load: loadBackups, restore, preview } = useBackups(backupType);
@@ -124,8 +161,8 @@ function AppContent() {
 
   // Save profile
   const handleSave = useCallback(async () => {
-    const name = editingProfile || formName.trim();
-    if (!name) {
+    const currentName = formName.trim();
+    if (!currentName) {
       showToast('请填写套餐名称');
       return;
     }
@@ -139,51 +176,56 @@ function AppContent() {
 
     try {
       if (editingProfile) {
-        if (!formToken && Object.keys(envData).length === 0) {
-          showToast('请至少填写一项');
-          return;
+        if (currentName !== editingProfile) {
+          const isSaveAsNew = await showConfirm(
+            '套餐名称已变更',
+            `检测到套餐名称已由「${editingProfile}」修改为「${currentName}」。\n\n是否将此配置【另存为新套餐】？\n\n- 点击「确认」：创建名为「${currentName}」的新套餐（原「${editingProfile}」保持不变）\n- 点击「取消」：将此修改更新至原套餐「${editingProfile}」（套餐名称不变更）`,
+            'primary',
+            '另存为新套餐'
+          );
+
+          if (isSaveAsNew) {
+            await clone(editingProfile, currentName, envData);
+            showToast(`已另存为新套餐「${currentName}」`);
+          } else {
+            if (!formToken && Object.keys(envData).length === 0) {
+              showToast('请至少填写一项进行更新');
+              return;
+            }
+            await update(editingProfile, envData);
+            showToast(`套餐「${editingProfile}」配置已更新`);
+          }
+        } else {
+          if (!formToken && Object.keys(envData).length === 0) {
+            showToast('请至少填写一项进行更新');
+            return;
+          }
+          await update(editingProfile, envData);
+          showToast(`套餐「${editingProfile}」已更新`);
         }
-        await update(editingProfile, envData);
-        showToast(`套餐「${name}」已更新`);
       } else {
         if (!formToken) {
           showToast('请填写 API Key');
           return;
         }
-        await add(name, envData);
-        showToast(`套餐「${name}」已添加`);
+        await add(currentName, envData);
+        showToast(`套餐「${currentName}」已添加`);
       }
       clearForm();
     } catch (e) {
       showToast(`保存失败: ${(e as Error).message}`);
     }
-  }, [editingProfile, formName, formToken, formBaseUrl, formOpus, formSonnet, formHaiku, add, update, clearForm, showToast]);
-
-  // Save as new profile
-  const handleSaveAs = useCallback(async () => {
-    if (!editingProfile) return;
-    const newName = prompt('请输入新套餐名称：');
-    if (!newName?.trim()) return;
-
-    const overrides: ClaudeEnv = {};
-    if (formToken) overrides.ANTHROPIC_AUTH_TOKEN = formToken;
-    if (formBaseUrl) overrides.ANTHROPIC_BASE_URL = formBaseUrl;
-    if (formOpus) overrides.ANTHROPIC_DEFAULT_OPUS_MODEL = formOpus;
-    if (formSonnet) overrides.ANTHROPIC_DEFAULT_SONNET_MODEL = formSonnet;
-    if (formHaiku) overrides.ANTHROPIC_DEFAULT_HAIKU_MODEL = formHaiku;
-
-    try {
-      await clone(editingProfile, newName.trim(), overrides);
-      showToast(`已另存为新套餐「${newName.trim()}」`);
-      clearForm();
-    } catch (e) {
-      showToast(`保存失败: ${(e as Error).message}`);
-    }
-  }, [editingProfile, formToken, formBaseUrl, formOpus, formSonnet, formHaiku, clone, clearForm, showToast]);
+  }, [editingProfile, formName, formToken, formBaseUrl, formOpus, formSonnet, formHaiku, add, update, clone, clearForm, showToast, showConfirm]);
 
   // Switch profile
   const handleSwitch = useCallback(async (name: string) => {
-    if (!confirm(`确定切换至套餐 "${name}" 吗？`)) return;
+    const isConfirmed = await showConfirm(
+      '切换套餐',
+      `您确定要切换至套餐「${name}」吗？激活后新配置将立即对 Claude Code 生效。`,
+      'primary',
+      '确认切换'
+    );
+    if (!isConfirmed) return;
     try {
       await switchTo(name);
       showToast(`已切换到「${name}」，请重启 Claude Code`);
@@ -191,18 +233,24 @@ function AppContent() {
     } catch (e) {
       showToast(`切换失败: ${(e as Error).message}`);
     }
-  }, [switchTo, showToast, loadBackups]);
+  }, [switchTo, showToast, loadBackups, showConfirm]);
 
   // Delete profile
   const handleDelete = useCallback(async (name: string) => {
-    if (!confirm(`确定删除套餐 "${name}" 吗？\n此操作有备份，可还原。`)) return;
+    const isConfirmed = await showConfirm(
+      '删除套餐',
+      `确定要删除套餐「${name}」吗？\n\n提示：此操作会自动生成快照备份，如有需要，您可在「备份与恢复」面板中随时还原。`,
+      'danger',
+      '确认删除'
+    );
+    if (!isConfirmed) return;
     try {
       await remove(name);
       showToast(`已删除「${name}」`);
     } catch (e) {
       showToast(`删除失败: ${(e as Error).message}`);
     }
-  }, [remove, showToast]);
+  }, [remove, showToast, showConfirm]);
 
   // Load backups
   const handleLoadBackups = useCallback(async () => {
@@ -230,7 +278,13 @@ function AppContent() {
 
   // Restore backup
   const handleRestoreBackup = useCallback(async (fileName: string) => {
-    if (!confirm(`确定还原 ${backupType} 到 ${fileName}？\n当前配置会被自动备份。`)) return;
+    const isConfirmed = await showConfirm(
+      '还原备份',
+      `确定要将当前的 ${backupType === 'settings' ? '系统环境底层配置' : '套餐数据'} 还原到备份文件「${fileName}」的状态吗？\n\n还原前，系统会自动为当前状态生成快照以防万一。`,
+      'warning',
+      '确认还原'
+    );
+    if (!isConfirmed) return;
     try {
       await restore(fileName);
       showToast('还原成功，请重启 Claude Code');
@@ -242,7 +296,7 @@ function AppContent() {
     } catch (e) {
       showToast(`还原失败: ${(e as Error).message}`);
     }
-  }, [backupType, restore, loadProfiles, loadCurrentEnv, loadBackups, showToast]);
+  }, [backupType, restore, loadProfiles, loadCurrentEnv, loadBackups, showToast, showConfirm]);
 
   // Load logs
   const handleLoadLogs = useCallback(async () => {
@@ -412,7 +466,6 @@ function AppContent() {
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   placeholder="如: deepseek-pro, aliyun-opus"
-                  disabled={!!editingProfile}
                 />
               </div>
 
@@ -468,20 +521,12 @@ function AppContent() {
               </div>
 
               <div className={styles.row} style={{ borderTop: '1px solid var(--border)', paddingTop: '18px', marginTop: '18px' }}>
-                <button className={`${styles.btn} ${styles.btnOutline}`} onClick={clearForm}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </svg>
-                  取消
-                </button>
-                
                 {editingProfile && (
-                  <button className={`${styles.btn} ${styles.btnOutline}`} onClick={handleSaveAs}>
+                  <button className={`${styles.btn} ${styles.btnOutline}`} onClick={clearForm}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      <path d="M18 6L6 18M6 6l12 12" />
                     </svg>
-                    另存为新套餐
+                    取消编辑
                   </button>
                 )}
 
@@ -776,7 +821,22 @@ function AppContent() {
       {/* Toast popup */}
       <Toast message={toast.message} visible={toast.visible} />
 
-
+      {/* Custom Dialog popup */}
+      {dialogConfig && (
+        <CustomDialog
+          isOpen={dialogConfig.isOpen}
+          type={dialogConfig.type}
+          title={dialogConfig.title}
+          message={dialogConfig.message}
+          defaultValue={dialogConfig.defaultValue}
+          placeholder={dialogConfig.placeholder}
+          confirmText={dialogConfig.confirmText}
+          cancelText={dialogConfig.cancelText}
+          intent={dialogConfig.intent}
+          onClose={dialogConfig.onClose}
+          onConfirm={dialogConfig.onConfirm}
+        />
+      )}
     </div>
   );
 }
