@@ -407,12 +407,6 @@ function AppContent() {
                     {env.ANTHROPIC_BASE_URL || '官方默认'}
                   </span>
                 </div>
-                <div className={styles.statusRow}>
-                  <span className={styles.statusKey}>Sonnet 模型</span>
-                  <span className={styles.statusValue} title={env.ANTHROPIC_DEFAULT_SONNET_MODEL || '官方默认'}>
-                    {env.ANTHROPIC_DEFAULT_SONNET_MODEL || '官方默认'}
-                  </span>
-                </div>
                 {env.ANTHROPIC_DEFAULT_OPUS_MODEL && (
                   <div className={styles.statusRow}>
                     <span className={styles.statusKey}>Opus 模型</span>
@@ -421,6 +415,12 @@ function AppContent() {
                     </span>
                   </div>
                 )}
+                <div className={styles.statusRow}>
+                  <span className={styles.statusKey}>Sonnet 模型</span>
+                  <span className={styles.statusValue} title={env.ANTHROPIC_DEFAULT_SONNET_MODEL || '官方默认'}>
+                    {env.ANTHROPIC_DEFAULT_SONNET_MODEL || '官方默认'}
+                  </span>
+                </div>
                 {env.ANTHROPIC_DEFAULT_HAIKU_MODEL && (
                   <div className={styles.statusRow}>
                     <span className={styles.statusKey}>Haiku 模型</span>

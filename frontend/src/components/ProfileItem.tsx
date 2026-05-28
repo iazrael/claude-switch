@@ -50,16 +50,16 @@ export function ProfileItem({
           <span className={styles.metaLabel}>Base URL</span>
           <span className={styles.metaValue} title={baseUrl}>{baseUrl}</span>
         </div>
-        {sonnet && (
-          <div className={styles.metaItem}>
-            <span className={styles.metaLabel}>Sonnet</span>
-            <span className={styles.metaValue} title={sonnet}>{sonnet}</span>
-          </div>
-        )}
         {opus && (
           <div className={styles.metaItem}>
             <span className={styles.metaLabel}>Opus</span>
             <span className={styles.metaValue} title={opus}>{opus}</span>
+          </div>
+        )}
+        {sonnet && (
+          <div className={styles.metaItem}>
+            <span className={styles.metaLabel}>Sonnet</span>
+            <span className={styles.metaValue} title={sonnet}>{sonnet}</span>
           </div>
         )}
         {haiku && (
