@@ -194,6 +194,17 @@ function AppContent() {
             }
             await update(editingProfile, envData);
             showToast(`套餐「${editingProfile}」配置已更新`);
+            // 如果修改的是当前激活的套餐，提示是否应用
+            if (active === editingProfile) {
+              const doApply = await showConfirm(
+                '应用配置',
+                `套餐「${editingProfile}」当前已激活，是否立即应用最新配置？`
+              );
+              if (doApply) {
+                await switchTo(editingProfile);
+                showToast(`已应用最新配置`);
+              }
+            }
           }
         } else {
           if (!formToken && Object.keys(envData).length === 0) {
@@ -202,6 +213,17 @@ function AppContent() {
           }
           await update(editingProfile, envData);
           showToast(`套餐「${editingProfile}」已更新`);
+          // 如果修改的是当前激活的套餐，提示是否应用
+          if (active === editingProfile) {
+            const doApply = await showConfirm(
+              '应用配置',
+              `套餐「${editingProfile}」当前已激活，是否立即应用最新配置？`
+            );
+            if (doApply) {
+              await switchTo(editingProfile);
+              showToast(`已应用最新配置`);
+            }
+          }
         }
       } else {
         if (!formToken) {

@@ -131,6 +131,25 @@ async function editProfileUI(name?: string): Promise<void> {
 
   await manager.updateProfile(name, updates);
   console.log(chalk.green(`套餐 "${name}" 已更新`));
+
+  // 如果修改的是当前激活的套餐，提示是否立即应用
+  const activeProfile = await manager.getActiveProfile();
+  if (activeProfile === name) {
+    const { applyNow } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'applyNow',
+        message: `套餐 "${name}" 当前已激活，是否立即应用最新配置？`,
+        default: true,
+      },
+    ]);
+    if (applyNow) {
+      await manager.switchProfile(name);
+      console.log(chalk.green(`✅ 已应用最新配置`));
+    } else {
+      console.log(chalk.yellow('配置已保存，下次切换时生效'));
+    }
+  }
 }
 
 // 交互：复制套餐
