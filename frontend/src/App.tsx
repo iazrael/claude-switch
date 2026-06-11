@@ -128,16 +128,7 @@ function AppContent() {
   }, [setEditingProfile]);
 
   // Create new profile
-  const handleCreateNew = useCallback(() => {
-    setEditingProfile(null);
-    setFormName('');
-    setFormToken('');
-    setFormBaseUrl('');
-    setFormOpus('');
-    setFormSonnet('');
-    setFormHaiku('');
-    setFormPreset('');
-  }, [setEditingProfile]);
+
 
   // Edit profile
   const handleEdit = useCallback((name: string) => {
@@ -577,14 +568,7 @@ function AppContent() {
                   </svg>
                   已保存的套餐库
                 </h2>
-                {!editingProfile && (
-                  <button className={`${styles.btn} ${styles.btnPrimary} ${styles.btnSm}`} onClick={handleCreateNew}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 5v14M5 12h14" />
-                    </svg>
-                    新建套餐
-                  </button>
-                )}
+
               </div>
               
               <div className={styles.profileList}>
