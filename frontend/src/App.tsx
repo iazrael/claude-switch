@@ -242,6 +242,7 @@ function AppContent() {
     try {
       await switchTo(name);
       showToast(`已切换到「${name}」，请重启 Claude Code`);
+      loadCurrentEnv(); // 刷新生效环境变量面板
       loadBackups().catch(() => {}); // 刷新备份列表失败不影响主流程，用户可手动重载
     } catch (e) {
       showToast(`切换失败: ${(e as Error).message}`);
