@@ -470,7 +470,7 @@ async function serveAction(opts: ServeOptions): Promise<void> {
     process.exit(1);
   }
 
-  // 端口解析：-p > CLAUDE_SWITCH_PORT > 3333
+  // 端口解析：-p > CLAUDE_SWITCH_PORT > 随机端口(0)
   const port = serve._internal.resolvePort(portStr);
 
   // 分发

@@ -112,11 +112,11 @@ describe('serve 命令', () => {
   // ─── 工具函数测试 ───
 
   describe('工具函数', () => {
-    it('resolvePort: -p > env > 3333', () => {
+    it('resolvePort: -p > env > 0 (random port)', () => {
       expect(resolvePort('8080')).toBe(8080);
       const orig = process.env.CLAUDE_SWITCH_PORT;
       delete process.env.CLAUDE_SWITCH_PORT;
-      expect(resolvePort()).toBe(3333);
+      expect(resolvePort()).toBe(0);
       process.env.CLAUDE_SWITCH_PORT = '9999';
       expect(resolvePort()).toBe(9999);
       if (orig) process.env.CLAUDE_SWITCH_PORT = orig;
@@ -129,7 +129,7 @@ describe('serve 命令', () => {
       });
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       expect(() => resolvePort('abc')).toThrow(/process\.exit/);
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('1-65535'));
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('0-65535'));
       exitSpy.mockRestore();
       errorSpy.mockRestore();
     });
@@ -140,7 +140,7 @@ describe('serve 命令', () => {
       });
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       expect(() => resolvePort('99999')).toThrow(/process\.exit/);
-      expect(() => resolvePort('0')).toThrow(/process\.exit/);
+      expect(resolvePort('0')).toBe(0);
       expect(() => resolvePort('-1')).toThrow(/process\.exit/);
       exitSpy.mockRestore();
       errorSpy.mockRestore();
@@ -211,6 +211,29 @@ describe('serve 命令', () => {
       // 清理信号处理器（只移除当前注册的，不影响其他测试）
       cleanupSignalHandlers();
 
+      exitSpy.mockRestore();
+    }, 10000);
+
+    it('前台启动（端口为 0）时自动分配随机端口并写入 PID', async () => {
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code: any) => { return code as never; });
+
+      serve.startForeground(0);
+
+      // 等待 PID 文件出现
+      const pidInfo = await serve._internal.waitForPidFile(3000);
+      expect(pidInfo).not.toBeNull();
+      expect(pidInfo!.port).toBeGreaterThan(0);
+      expect(isAlive(pidInfo!.pid)).toBe(true);
+
+      // 验证 HTTP 可访问
+      await new Promise<void>((resolve, reject) => {
+        http.get(`http://localhost:${pidInfo!.port}/api/presets`, (res) => {
+          expect(res.statusCode).toBe(200);
+          resolve();
+        }).on('error', reject);
+      });
+
+      cleanupSignalHandlers();
       exitSpy.mockRestore();
     }, 10000);
 
@@ -309,6 +332,33 @@ describe('serve 命令', () => {
       // 验证 HTTP 可访问
       await new Promise<void>((resolve, reject) => {
         http.get(`http://localhost:${port}/api/presets`, (res) => {
+          expect(res.statusCode).toBe(200);
+          resolve();
+        }).on('error', reject);
+      });
+
+      // 停止 daemon
+      await serve.stop();
+      const pidInfoAfter = await readPidFile();
+      expect(pidInfoAfter).toBeNull();
+    }, 20000);
+
+    it('daemon 启动（端口为 0）后自动分配随机端口并正确创建 PID', async () => {
+      await serve.startDaemon(0);
+
+      // 验证 PID 文件存在且内容正确
+      const pidInfo = await readPidFile();
+      expect(pidInfo).not.toBeNull();
+      expect(pidInfo!.port).toBeGreaterThan(0);
+      expect(typeof pidInfo!.pid).toBe('number');
+      expect(pidInfo!.startedAt).toBeDefined();
+
+      // 验证进程存活
+      expect(isAlive(pidInfo!.pid)).toBe(true);
+
+      // 验证 HTTP 可访问
+      await new Promise<void>((resolve, reject) => {
+        http.get(`http://localhost:${pidInfo!.port}/api/presets`, (res) => {
           expect(res.statusCode).toBe(200);
           resolve();
         }).on('error', reject);

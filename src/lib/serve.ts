@@ -24,10 +24,10 @@ function resolvePort(portStr?: string | number): number {
     port = parseInt(process.env.CLAUDE_SWITCH_PORT, 10);
     source = process.env.CLAUDE_SWITCH_PORT;
   } else {
-    return 3333;
+    return 0;
   }
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    console.error(`错误: 端口必须是 1-65535 范围内的整数，收到: "${source}"`);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    console.error(`错误: 端口必须是 0-65535 范围内的整数，收到: "${source}"`);
     process.exit(1);
   }
   return port;
@@ -176,8 +176,10 @@ export async function startForeground(port: number): Promise<void> {
   const { default: app } = await import('../server.js');
   const server = app.listen(port, async () => {
     // PID 写入必须在 listen 成功回调内
-    await writePidFile(port);
-    console.log(`管理端已启动 → http://localhost:${port}`);
+    const addr = server.address();
+    const actualPort = typeof addr === 'string' ? port : (addr?.port ?? port);
+    await writePidFile(actualPort);
+    console.log(`管理端已启动 → http://localhost:${actualPort}`);
   });
 
   // listen 失败时 PID 尚未写入，无需清理
@@ -236,7 +238,7 @@ export async function startDaemon(port: number): Promise<void> {
     process.exit(1);
   }
 
-  console.log(`管理端已后台启动 → PID: ${pidInfo.pid}, http://localhost:${port}, 日志: ${SERVER_LOG_PATH}`);
+  console.log(`管理端已后台启动 → PID: ${pidInfo.pid}, http://localhost:${pidInfo.port}, 日志: ${SERVER_LOG_PATH}`);
 }
 
 export async function stop(): Promise<void> {
@@ -325,7 +327,9 @@ export async function daemonChildMain(port: number): Promise<void> {
 
   const server = app.listen(port, async () => {
     // 仅在 listen 成功后写入 PID
-    await writePidFile(port);
+    const addr = server.address();
+    const actualPort = typeof addr === 'string' ? port : (addr?.port ?? port);
+    await writePidFile(actualPort);
   });
 
   // listen 失败 → 退出，PID 未写入
