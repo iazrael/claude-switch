@@ -222,6 +222,7 @@ function AppContent() {
               if (doApply) {
                 await switchTo(editingProfile);
                 showToast(`已应用最新配置`);
+                loadCurrentEnv(); // 刷新生效环境变量面板
               }
             }
           }
@@ -241,6 +242,7 @@ function AppContent() {
             if (doApply) {
               await switchTo(editingProfile);
               showToast(`已应用最新配置`);
+              loadCurrentEnv(); // 刷新生效环境变量面板
             }
           }
         }
@@ -256,7 +258,7 @@ function AppContent() {
     } catch (e) {
       showToast(`保存失败: ${(e as Error).message}`);
     }
-  }, [editingProfile, formName, formToken, formBaseUrl, formFable, formOpus, formSonnet, formHaiku, add, update, clone, clearForm, showToast, showConfirm]);
+  }, [editingProfile, formName, formToken, formBaseUrl, formFable, formOpus, formSonnet, formHaiku, active, add, update, clone, switchTo, clearForm, loadCurrentEnv, showToast, showConfirm]);
 
   // Switch profile
   const handleSwitch = useCallback(async (name: string) => {
