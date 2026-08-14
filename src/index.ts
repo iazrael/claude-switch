@@ -25,6 +25,7 @@ async function addProfileUI(name?: string): Promise<void> {
     { type: 'input', name: 'ANTHROPIC_AUTH_TOKEN', message: 'API Key' },
     { type: 'input', name: 'ANTHROPIC_BASE_URL', message: 'Base URL' },
     { type: 'input', name: 'ANTHROPIC_DEFAULT_SONNET_MODEL', message: 'Sonnet 模型（日常开发主力）' },
+    { type: 'input', name: 'ANTHROPIC_DEFAULT_FABLE_MODEL', message: 'Fable 模型（顶级复杂任务，可选）' },
     { type: 'input', name: 'ANTHROPIC_DEFAULT_OPUS_MODEL', message: 'Opus 模型（复杂任务，可选）' },
     { type: 'input', name: 'ANTHROPIC_DEFAULT_HAIKU_MODEL', message: 'Haiku 模型（轻量任务，可选）' },
   ]);
@@ -78,6 +79,7 @@ async function editProfileUI(name?: string): Promise<void> {
     { key: 'ANTHROPIC_AUTH_TOKEN', label: 'API Key' },
     { key: 'ANTHROPIC_BASE_URL', label: 'Base URL' },
     { key: 'ANTHROPIC_DEFAULT_SONNET_MODEL', label: 'Sonnet 模型' },
+    { key: 'ANTHROPIC_DEFAULT_FABLE_MODEL', label: 'Fable 模型' },
     { key: 'ANTHROPIC_DEFAULT_OPUS_MODEL', label: 'Opus 模型' },
     { key: 'ANTHROPIC_DEFAULT_HAIKU_MODEL', label: 'Haiku 模型' },
   ];

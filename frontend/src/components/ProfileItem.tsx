@@ -21,6 +21,7 @@ export function ProfileItem({
   onEdit,
   onDelete,
 }: ProfileItemProps) {
+  const fable = env.ANTHROPIC_DEFAULT_FABLE_MODEL;
   const sonnet = env.ANTHROPIC_DEFAULT_SONNET_MODEL;
   const opus = env.ANTHROPIC_DEFAULT_OPUS_MODEL;
   const haiku = env.ANTHROPIC_DEFAULT_HAIKU_MODEL;
@@ -50,6 +51,12 @@ export function ProfileItem({
           <span className={styles.metaLabel}>Base URL</span>
           <span className={styles.metaValue} title={baseUrl}>{baseUrl}</span>
         </div>
+        {fable && (
+          <div className={styles.metaItem}>
+            <span className={styles.metaLabel}>Fable</span>
+            <span className={styles.metaValue} title={fable}>{fable}</span>
+          </div>
+        )}
         {opus && (
           <div className={styles.metaItem}>
             <span className={styles.metaLabel}>Opus</span>

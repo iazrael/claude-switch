@@ -372,6 +372,7 @@ export function getPresetTemplates(): Record<string, PresetTemplate> {
     aliyun: {
       label: '阿里云百炼',
       baseUrl: 'https://coding.dashscope.aliyuncs.com/apps/anthropic',
+      fable: 'qwen3.5-max',
       opus: 'qwen3.5-max',
       sonnet: 'qwen3.5-plus',
       haiku: 'qwen3.5-turbo',
@@ -379,6 +380,7 @@ export function getPresetTemplates(): Record<string, PresetTemplate> {
     volcengine: {
       label: '火山引擎方舟',
       baseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
+      fable: 'doubao-1.5-pro-256k',
       opus: 'doubao-1.5-pro-256k',
       sonnet: 'doubao-1.5-pro-32k',
       haiku: 'doubao-1.5-lite-32k',
@@ -386,6 +388,7 @@ export function getPresetTemplates(): Record<string, PresetTemplate> {
     zhipu: {
       label: '智谱AI',
       baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+      fable: 'GLM-5.1',
       opus: 'GLM-5.1',
       sonnet: 'glm-4.7',
       haiku: 'glm-4.7',
@@ -393,6 +396,7 @@ export function getPresetTemplates(): Record<string, PresetTemplate> {
     deepseek: {
       label: 'DeepSeek',
       baseUrl: 'https://api.deepseek.com/anthropic',
+      fable: 'deepseek-reasoner',
       opus: 'deepseek-reasoner',
       sonnet: 'deepseek-chat',
       haiku: 'deepseek-chat',

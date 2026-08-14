@@ -266,6 +266,7 @@ Claude Code 使用三级模型分工，套餐管理的核心环境变量：
 
 | 变量 | 角色 | 用途 |
 |---|---|---|
+| `ANTHROPIC_DEFAULT_FABLE_MODEL` | 顶级复杂任务 | 最深度推理、前沿研究（最高级，可选） |
 | `ANTHROPIC_DEFAULT_OPUS_MODEL` | 复杂任务 | 架构设计、核心算法 |
 | `ANTHROPIC_DEFAULT_SONNET_MODEL` | 日常主力 | 开发、Bug 修复 |
 | `ANTHROPIC_DEFAULT_HAIKU_MODEL` | 轻量高频 | 快速补全、格式化 |

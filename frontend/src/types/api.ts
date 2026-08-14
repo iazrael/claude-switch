@@ -1,6 +1,7 @@
 // 环境变量
 export interface ClaudeEnv {
   ANTHROPIC_BASE_URL?: string;
+  ANTHROPIC_DEFAULT_FABLE_MODEL?: string;
   ANTHROPIC_DEFAULT_OPUS_MODEL?: string;
   ANTHROPIC_DEFAULT_SONNET_MODEL?: string;
   ANTHROPIC_DEFAULT_HAIKU_MODEL?: string;
@@ -30,6 +31,7 @@ export interface CurrentEnvResponse {
 export interface PresetTemplate {
   label: string;
   baseUrl: string;
+  fable: string;
   opus: string;
   sonnet: string;
   haiku: string;

@@ -10,6 +10,7 @@ import { DiffTable } from './components/DiffTable';
 import { ProfileItem } from './components/ProfileItem';
 import { BackupItem } from './components/BackupItem';
 import { CustomDialog } from './components/CustomDialog';
+import { Modal } from './components/Modal';
 import styles from './styles/App.module.css';
 import type { BackupType, ProfileDiff, SettingsDiff, ClaudeEnv } from './types/api';
 
@@ -71,10 +72,12 @@ function AppContent() {
   const [formName, setFormName] = useState('');
   const [formToken, setFormToken] = useState('');
   const [formBaseUrl, setFormBaseUrl] = useState('');
+  const [formFable, setFormFable] = useState('');
   const [formOpus, setFormOpus] = useState('');
   const [formSonnet, setFormSonnet] = useState('');
   const [formHaiku, setFormHaiku] = useState('');
   const [formPreset, setFormPreset] = useState('');
+  const [formOpen, setFormOpen] = useState(false);
 
   // Initial load
   useEffect(() => {
@@ -110,6 +113,7 @@ function AppContent() {
     const p = presets[key];
     if (!p) return;
     setFormBaseUrl(p.baseUrl);
+    setFormFable(p.fable);
     setFormOpus(p.opus);
     setFormSonnet(p.sonnet);
     setFormHaiku(p.haiku);
@@ -121,11 +125,19 @@ function AppContent() {
     setFormName('');
     setFormToken('');
     setFormBaseUrl('');
+    setFormFable('');
     setFormOpus('');
     setFormSonnet('');
     setFormHaiku('');
     setFormPreset('');
+    setFormOpen(false);
   }, [setEditingProfile]);
+
+  // 打开新建套餐弹窗
+  const openCreateForm = useCallback(() => {
+    clearForm();
+    setFormOpen(true);
+  }, [clearForm]);
 
   // Create new profile
 
@@ -137,17 +149,12 @@ function AppContent() {
     setEditingProfile(name);
     setFormName(name);
     setFormBaseUrl(profile.env.ANTHROPIC_BASE_URL || '');
+    setFormFable(profile.env.ANTHROPIC_DEFAULT_FABLE_MODEL || '');
     setFormOpus(profile.env.ANTHROPIC_DEFAULT_OPUS_MODEL || '');
     setFormSonnet(profile.env.ANTHROPIC_DEFAULT_SONNET_MODEL || '');
     setFormHaiku(profile.env.ANTHROPIC_DEFAULT_HAIKU_MODEL || '');
     setFormToken('');
-    // Auto-scroll to form card on small viewports
-    setTimeout(() => {
-      const formEl = document.querySelector(`.${styles.formCard}`);
-      if (formEl) {
-        formEl.scrollIntoView({ behavior: 'smooth' });
-      }
-    }, 50);
+    setFormOpen(true);
   }, [profiles, setEditingProfile]);
 
   // Save profile
@@ -161,9 +168,30 @@ function AppContent() {
     const envData: ClaudeEnv = {};
     if (formToken) envData.ANTHROPIC_AUTH_TOKEN = formToken;
     if (formBaseUrl) envData.ANTHROPIC_BASE_URL = formBaseUrl;
+    if (formFable) envData.ANTHROPIC_DEFAULT_FABLE_MODEL = formFable;
     if (formOpus) envData.ANTHROPIC_DEFAULT_OPUS_MODEL = formOpus;
     if (formSonnet) envData.ANTHROPIC_DEFAULT_SONNET_MODEL = formSonnet;
     if (formHaiku) envData.ANTHROPIC_DEFAULT_HAIKU_MODEL = formHaiku;
+
+    // 只填写了一个模型时，提示是否把其他模型也设为该值
+    const filledModels = [formFable, formOpus, formSonnet, formHaiku]
+      .map(v => v.trim())
+      .filter(Boolean);
+    if (filledModels.length === 1) {
+      const soleModel = filledModels[0];
+      const doSync = await showConfirm(
+        '应用到全部模型？',
+        `检测到你只填写了一个模型「${soleModel}」。\n是否把 Fable / Opus / Sonnet / Haiku 四个档位都设为该模型？`,
+        'primary',
+        '全部设为该模型'
+      );
+      if (doSync) {
+        envData.ANTHROPIC_DEFAULT_FABLE_MODEL = soleModel;
+        envData.ANTHROPIC_DEFAULT_OPUS_MODEL = soleModel;
+        envData.ANTHROPIC_DEFAULT_SONNET_MODEL = soleModel;
+        envData.ANTHROPIC_DEFAULT_HAIKU_MODEL = soleModel;
+      }
+    }
 
     try {
       if (editingProfile) {
@@ -228,7 +256,7 @@ function AppContent() {
     } catch (e) {
       showToast(`保存失败: ${(e as Error).message}`);
     }
-  }, [editingProfile, formName, formToken, formBaseUrl, formOpus, formSonnet, formHaiku, add, update, clone, clearForm, showToast, showConfirm]);
+  }, [editingProfile, formName, formToken, formBaseUrl, formFable, formOpus, formSonnet, formHaiku, add, update, clone, clearForm, showToast, showConfirm]);
 
   // Switch profile
   const handleSwitch = useCallback(async (name: string) => {
@@ -421,6 +449,14 @@ function AppContent() {
                     {env.ANTHROPIC_BASE_URL || '官方默认'}
                   </span>
                 </div>
+                {env.ANTHROPIC_DEFAULT_FABLE_MODEL && (
+                  <div className={styles.statusRow}>
+                    <span className={styles.statusKey}>Fable 模型</span>
+                    <span className={styles.statusValue} title={env.ANTHROPIC_DEFAULT_FABLE_MODEL}>
+                      {env.ANTHROPIC_DEFAULT_FABLE_MODEL}
+                    </span>
+                  </div>
+                )}
                 {env.ANTHROPIC_DEFAULT_OPUS_MODEL && (
                   <div className={styles.statusRow}>
                     <span className={styles.statusKey}>Opus 模型</span>
@@ -446,15 +482,9 @@ function AppContent() {
               </div>
             </div>
 
-            {/* Inline Config Form Card */}
-            <div className={`${styles.formCard} ${editingProfile ? styles.formActiveBorder : ''}`}>
-              <h2 className={styles.cardTitle}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-                {editingProfile ? `编辑套餐配置: ${editingProfile}` : '创建新配置套餐'}
-              </h2>
+            {/* Config Form Modal */}
+            {formOpen && (
+              <Modal title={editingProfile ? `编辑套餐配置: ${editingProfile}` : '创建新配置套餐'} onClose={clearForm}>
 
               <div className={styles.formGroup}>
                 <label className={styles.label}>厂商套餐模板（快速填充）</label>
@@ -504,7 +534,16 @@ function AppContent() {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '20px' }}>
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>Fable 模型</label>
+                  <input
+                    className={styles.input}
+                    value={formFable}
+                    onChange={(e) => setFormFable(e.target.value)}
+                    placeholder="claude-fable-5-... (可选)"
+                  />
+                </div>
                 <div className={styles.formGroup}>
                   <label className={styles.label}>Opus 模型</label>
                   <input
@@ -553,7 +592,8 @@ function AppContent() {
                   保存套餐
                 </button>
               </div>
-            </div>
+              </Modal>
+            )}
           </div>
 
           {/* RIGHT: Saved Profiles Grid */}
@@ -569,7 +609,13 @@ function AppContent() {
                   </svg>
                   已保存的套餐库
                 </h2>
-
+                <button className={`${styles.btn} ${styles.btnPrimary} ${styles.btnSm}`} onClick={openCreateForm}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  新建套餐
+                </button>
               </div>
               
               <div className={styles.profileList}>
@@ -581,7 +627,7 @@ function AppContent() {
                       <line x1="9" y1="13" x2="15" y2="13" />
                       <line x1="9" y1="17" x2="15" y2="17" />
                     </svg>
-                    暂无保存的套餐，请在左侧面板创建您的第一个配置套餐
+                    暂无保存的套餐，点击右上角「新建套餐」创建您的第一个配置
                   </div>
                 ) : (
                   Object.entries(profiles).map(([name, profile]) => (
