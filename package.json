@@ -26,7 +26,8 @@
     "express": "^4.21.0",
     "fs-extra": "^11.2.0",
     "inquirer": "^8.2.5",
-    "proper-lockfile": "^4.1.2"
+    "proper-lockfile": "^4.1.2",
+    "react": "^19.2.8"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
@@ -42,5 +43,6 @@
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5"
-  }
+  },
+  "packageManager": "pnpm@10.12.1+sha512.f0dda8580f0ee9481c5c79a1d927b9164f2c478e90992ad268bbb2465a736984391d6333d2c327913578b2804af33474ca554ba29c04a8b13060a717675ae3ac"
 }
