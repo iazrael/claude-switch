@@ -58,7 +58,7 @@ claude-switch/
 ## 安装
 
 ```bash
-git clone https://github.com/AzraelYan/claude-switch.git
+git clone https://github.com/iazrael/claude-switch.git
 cd claude-switch
 pnpm install
 pnpm build      # 构建 TypeScript
