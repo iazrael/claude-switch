@@ -61,11 +61,13 @@ claude-switch/
 git clone https://github.com/iazrael/claude-switch.git
 cd claude-switch
 pnpm install
-pnpm build      # 构建 TypeScript
-pnpm link       # 全局安装命令
+pnpm build       # 构建后端与前端
+pnpm add -g .    # 全局安装命令（pnpm 10+ 不再支持 pnpm link --global）
 ```
 
-执行后 `claude-switch` 命令可在任意目录直接使用。移除时执行 `pnpm unlink -g claude-switch`。
+执行后 `claude-switch` 命令可在任意目录直接使用。移除时执行 `pnpm remove -g claude-switch`。
+
+> 使用 npm 时对应的命令为 `npm install -g .`，移除用 `npm uninstall -g claude-switch`。
 
 ## 使用
 

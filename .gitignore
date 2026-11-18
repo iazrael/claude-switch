@@ -2,10 +2,14 @@ node_modules/
 .DS_Store
 *.log
 .env
+.env.example
 .vscode/
 .antigravitycli/
 .omc/
 dist/
+
+# Playwright MCP 调试产物（截图、快照、控制台日志）
+.playwright-mcp/
 
 *.tsbuildinfo
 frontend/vite.config.d.ts
