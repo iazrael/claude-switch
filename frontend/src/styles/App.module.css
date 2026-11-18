@@ -71,6 +71,46 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Mobile layout: keep content inside the viewport */
+@media (max-width: 639px) {
+  body {
+    padding: 16px 12px;
+  }
+
+  .card,
+  .formCard {
+    padding: 16px;
+  }
+
+  .navbar {
+    padding: 12px 14px;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .navTabs {
+    width: 100%;
+    gap: 4px;
+  }
+
+  .navTabButton {
+    flex: 1;
+    justify-content: center;
+    gap: 4px;
+    padding: 8px 4px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+
+  .navTabButton svg {
+    display: none;
+  }
+
+  .statusValue {
+    max-width: 60%;
+  }
+}
+
 /* Scrollbar customization */
 ::-webkit-scrollbar {
   width: 8px;
@@ -487,13 +527,13 @@ select.input {
 /* Profile Grid */
 .profileList {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
 
 @media (min-width: 640px) and (max-width: 1023px) {
   .profileList {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

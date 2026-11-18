@@ -59,3 +59,11 @@
   from { transform: scale(0.95); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
 }
+
+@media (max-width: 639px) {
+  .modal {
+    width: 94%;
+    padding: 20px 16px;
+    max-height: 90vh;
+  }
+}
