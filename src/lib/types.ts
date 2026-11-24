@@ -74,3 +74,8 @@ export interface PidInfo {
   port: number;
   startedAt: string;
 }
+
+// serve 端口持久化配置
+export interface ServeConfig {
+  port: number;
+}

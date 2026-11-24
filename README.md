@@ -90,14 +90,14 @@ claude-switch --help       # 查看帮助
 ### Web 模式（推荐）
 
 ```bash
-claude-switch serve        # 前台运行，http://localhost:3333
+claude-switch serve        # 前台运行，默认 3333，占用时自动顺延
 claude-switch serve -d     # 后台运行
-claude-switch serve -p 8080  # 指定端口
-claude-switch serve --status  # 查看状态
+claude-switch serve -p 8080  # 指定端口（冲突时报错，不自动换）
+claude-switch serve --status  # 查看状态（含实际端口）
 claude-switch serve --stop    # 停止服务
 ```
 
-手机同局域网访问 `http://<你的IP>:3333`。
+端口会记住上次成功监听的地址，后续启动优先复用；被占用时自动往后找可用端口。手机同局域网访问 `http://<你的IP>:<端口>`，端口以 `serve --status` 为准。
 
 ## 数据存储
 
@@ -106,6 +106,7 @@ claude-switch serve --stop    # 停止服务
 ├── profiles.json    # 套餐配置（Token 加密）
 ├── server.pid       # serve 运行状态
 ├── server.log       # serve 日志
+├── serve-config.json # serve 上次使用的端口
 ├── backups/         # 自动备份
 └── logs/            # 操作日志
 ```

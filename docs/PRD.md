@@ -1,6 +1,6 @@
 # Claude Switch - 产品规格说明书
 
-> 版本：3.3.0 | 最后更新：2026-05-14
+> 版本：3.3.0 | 最后更新：2026-11-24
 
 ---
 
@@ -133,7 +133,8 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 ### 3.5 双模式访问
 
 #### F11: Web 管理端
-- 启动 HTTP 服务器，默认端口 3333
+- 启动 HTTP 服务器，默认端口 3333；端口占用时自动顺延到下一个可用端口
+- 成功监听的端口写入 `serve-config.json`，后续启动优先复用
 - 响应式设计，支持手机浏览器访问
 - 局域网内可通过 IP 访问
 
@@ -207,7 +208,12 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
   - `claude-switch serve -d -p <port>` — 后台 + 指定端口
   - `claude-switch serve --stop` — 停止运行中的服务
   - `claude-switch serve --status` — 查看服务状态（PID、端口、运行时长）
-- **端口优先级**：`-p` 参数 > `CLAUDE_SWITCH_PORT` 环境变量 > 默认值 3333
+- **端口优先级**：`-p` 参数 > `CLAUDE_SWITCH_PORT` 环境变量 > `serve-config.json` 保存的端口 > 默认值 3333
+- **端口回退**：
+  - `-p` / `CLAUDE_SWITCH_PORT` 显式指定时严格使用，端口冲突直接报错退出，不自动换
+  - 自动模式（未显式指定）下端口冲突时顺序尝试下一个端口，最多 20 个，用尽后交给系统分配
+  - `-p 0` 表示一次性随机端口，不写入配置
+- **端口持久化**：监听成功后把实际端口写入 `~/.claude-switch/serve-config.json`（原子写 + 600 权限），失败仅警告不影响服务
 - **互斥规则**：`--stop` / `--status` 与 `-d` / `-p` 互斥，同时指定报错退出；`--stop` 与 `--status` 本身互斥
 
 #### F21: 防重复启动
@@ -320,13 +326,23 @@ Claude Code 内部使用三级模型分工，Claude Switch 完整支持这一体
 { "pid": 12345, "port": 3333, "startedAt": "2026-05-12T10:00:00.000Z" }
 ```
 
+#### serve-config.json
+
+```json
+{ "port": 3334 }
+```
+
+- 记录上次成功监听的端口，后续 `serve` 启动时优先复用
+- `-p 0`（系统随机端口）不写入
+- 写入采用临时文件 + rename 原子替换，权限 600
+
 ### 4.3 环境变量
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `CLAUDE_SWITCH_DIR` | `~/.claude-switch` | 数据存储目录 |
 | `CLAUDE_SETTINGS_PATH` | `~/.claude/settings.json` | Claude Code 配置文件路径 |
-| `CLAUDE_SWITCH_PORT` | `3333` | Web 服务器端口 |
+| `CLAUDE_SWITCH_PORT` | 未设置 | Web 服务器端口（显式覆盖，冲突时报错） |
 
 ---
 

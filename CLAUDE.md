@@ -24,7 +24,7 @@ Claude Code 套餐快速切换工具 (v3.3.0)，支持多服务商配置管理�
 ```
 src/
 ├── index.ts                CLI 入口（Commander 命令定义 + Inquirer 交互 + serve 子命令）
-├── server.ts               Web 服务器（Express，端口通过 CLAUDE_SWITCH_PORT 配置）
+├── server.ts               Web 服务器（Express，端口由 serve 命令解析并持久化）
 ├── env.d.ts                环境变量类型声明
 └── lib/
     ├── config.ts           路径常量（支持环境变量覆盖）
@@ -84,11 +84,11 @@ pnpm build                    # 构建：tsup(后端) + vite(前端) → dist/
 node dist/index.js            # 运行构建后的 CLI
 
 # serve 服务管理
-tsx src/index.ts serve                    # 后台启动（默认端口 3333）
-tsx src/index.ts serve --foreground       # 前台启动
-tsx src/index.ts serve -p 4444            # 指定端口
-tsx src/index.ts serve stop               # 停止服务
-tsx src/index.ts serve status             # 查看状态
+tsx src/index.ts serve                    # 前台启动，默认 3333（占用时自动顺延并记住）
+tsx src/index.ts serve -d                 # 后台启动
+tsx src/index.ts serve -p 4444            # 指定端口（冲突时报错，不回退）
+tsx src/index.ts serve --stop             # 停止服务
+tsx src/index.ts serve --status           # 查看状态
 ```
 
 ### 测试
@@ -115,6 +115,7 @@ pnpm build              # 构建：tsup(后端) → dist/ + vite(前端) → dis
 - 备份文件位于 `~/.claude-switch/backups/`
 - 守护进程日志位于 `~/.claude-switch/server.log`（超过 10MB 自动轮转为 `.old`）
 - PID 文件位于 `~/.claude-switch/server.pid`，记录 PID、端口、启动时间
+- 端口配置位于 `~/.claude-switch/serve-config.json`，记录上次成功监听的端口（`-p 0` 不记录）
 - 加密后的 profiles.json 可直接查看，Token 字段格式为 `base64IV:base64Ciphertext`
 
 ## 代码规范与约定
@@ -190,6 +191,7 @@ interface DiffChange {
 | 每次保存前自动备份 | 误操作可一键还原，零风险 |
 | 预设模板硬编码 | 厂商 URL 和模型映射变化频率低，硬编码最简单可靠 |
 | serve 守护进程 | 通过 PID 文件 + spawn detached 子进程实现后台运行 |
+| 端口持久化 + 顺序回退 | 地址稳定便于书签和局域网访问；端口占用时自动顺延，避免启动失败 |
 | 前端 React 组件化 | 原生三文件已无法支撑交互复杂度，React + Vite 提供更好的开发体验 |
 
 ## v3.3.0 变更：edit CLI + copy CLI

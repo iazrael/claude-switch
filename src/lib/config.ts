@@ -16,3 +16,4 @@ export const BACKUP_DIR = path.join(BASE_DIR, 'backups');
 export const LOG_DIR = path.join(BASE_DIR, 'logs');
 export const PID_PATH = path.join(BASE_DIR, 'server.pid');
 export const SERVER_LOG_PATH = path.join(BASE_DIR, 'server.log');
+export const SERVE_CONFIG_PATH = path.join(BASE_DIR, 'serve-config.json');

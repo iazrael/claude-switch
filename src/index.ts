@@ -454,11 +454,19 @@ interface ServeOptions {
   status?: boolean;
   daemon?: boolean;
   port?: string;
+  daemonChild?: boolean;
+  daemonExplicit?: string;
 }
 
 async function serveAction(opts: ServeOptions): Promise<void> {
   const serve = await import('./lib/serve.js');
   const { stop: stopFlag, status: statusFlag, daemon, port: portStr } = opts;
+
+  // 内部入口：由 startDaemon 拉起的子进程，端口与是否显式由父进程决定
+  if (opts.daemonChild) {
+    const childPort = portStr ? serve._internal.parsePort(portStr) : serve._internal.DEFAULT_PORT;
+    return serve.daemonChildMain(childPort, { explicit: opts.daemonExplicit !== '0' });
+  }
 
   // 互斥校验
   const controlFlags = [stopFlag, statusFlag].filter(Boolean).length;
@@ -472,14 +480,17 @@ async function serveAction(opts: ServeOptions): Promise<void> {
     process.exit(1);
   }
 
-  // 端口解析：-p > CLAUDE_SWITCH_PORT > 随机端口(0)
-  const port = serve._internal.resolvePort(portStr);
-
-  // 分发
+  // 控制命令不涉及端口
   if (stopFlag) return serve.stop();
   if (statusFlag) return serve.status();
-  if (daemon) return serve.startDaemon(port);
-  return serve.startForeground(port);
+
+  // 端口解析：-p > CLAUDE_SWITCH_PORT > 上次保存的端口 > 默认 3333
+  // explicit 表示用户显式指定端口，冲突时直接失败而不自动回退
+  const { port, explicit } = await serve._internal.resolvePort(portStr);
+
+  // 分发
+  if (daemon) return serve.startDaemon(port, { explicit });
+  return serve.startForeground(port, { explicit });
 }
 
 program
@@ -490,6 +501,7 @@ program
   .option('--stop', '停止服务')
   .option('--status', '查看服务状态')
   .option('--daemon-child', '内部参数：启动守护子进程', false)
+  .option('--daemon-explicit <mode>', '内部参数：端口是否显式指定（1/0）')
   .action(serveAction);
 
 // 无参数时显示当前配置

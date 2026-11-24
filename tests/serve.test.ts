@@ -14,13 +14,14 @@ process.env.CLAUDE_SWITCH_DIR = TMP_DIR;
 const config = await import('../src/lib/config.js');
 const serve = await import('../src/lib/serve.js');
 
-const { readPidFile, writePidFile, cleanupPid, ensureNotRunning, isAlive, resolvePort, formatUptime, rotateLogIfNeeded, waitForExit, _activeSignalHandlers, cleanupSignalHandlers } = serve._internal;
+const { readPidFile, writePidFile, cleanupPid, ensureNotRunning, isAlive, resolvePort, readServeConfig, writeServeConfig, formatUptime, rotateLogIfNeeded, waitForExit, _activeSignalHandlers, cleanupSignalHandlers } = serve._internal;
 
 describe('serve 命令', () => {
   beforeEach(async () => {
     await fs.ensureDir(TMP_DIR);
     await fs.remove(config.PID_PATH).catch(() => {});
     await fs.remove(config.SERVER_LOG_PATH).catch(() => {});
+    await fs.remove(config.SERVE_CONFIG_PATH).catch(() => {});
   });
 
   afterEach(async () => {
@@ -112,46 +113,101 @@ describe('serve 命令', () => {
   // ─── 工具函数测试 ───
 
   describe('工具函数', () => {
-    it('resolvePort: -p > env > 0 (random port)', () => {
-      expect(resolvePort('8080')).toBe(8080);
-      const orig = process.env.CLAUDE_SWITCH_PORT;
-      delete process.env.CLAUDE_SWITCH_PORT;
-      expect(resolvePort()).toBe(0);
-      process.env.CLAUDE_SWITCH_PORT = '9999';
-      expect(resolvePort()).toBe(9999);
-      if (orig) process.env.CLAUDE_SWITCH_PORT = orig;
-      else delete process.env.CLAUDE_SWITCH_PORT;
-    });
-
-    it('resolvePort: 非数字端口报错', () => {
-      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code: any) => {
-        throw new Error(`process.exit(${code})`);
-      });
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      expect(() => resolvePort('abc')).toThrow(/process\.exit/);
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('0-65535'));
-      exitSpy.mockRestore();
-      errorSpy.mockRestore();
-    });
-
-    it('resolvePort: 超范围端口报错', () => {
-      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code: any) => {
-        throw new Error(`process.exit(${code})`);
-      });
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      expect(() => resolvePort('99999')).toThrow(/process\.exit/);
-      expect(resolvePort('0')).toBe(0);
-      expect(() => resolvePort('-1')).toThrow(/process\.exit/);
-      exitSpy.mockRestore();
-      errorSpy.mockRestore();
-    });
-
     it('formatUptime 格式化正确', () => {
       expect(formatUptime(0)).toBe('0秒');
       expect(formatUptime(1000)).toBe('1秒');
       expect(formatUptime(61000)).toBe('1分钟1秒');
       expect(formatUptime(3661000)).toBe('1小时1分钟1秒');
       expect(formatUptime(90061000)).toBe('1天1小时1分钟1秒');
+    });
+  });
+
+  // ─── 端口配置持久化 ───
+
+  describe('端口配置', () => {
+    it('writeServeConfig / readServeConfig 往返并设置 600 权限', async () => {
+      await writeServeConfig(3334);
+      expect(await readServeConfig()).toBe(3334);
+      const stat = await fs.stat(config.SERVE_CONFIG_PATH);
+      expect(stat.mode & 0o777).toBe(0o600);
+    });
+
+    it('配置文件不存在返回 null', async () => {
+      expect(await readServeConfig()).toBeNull();
+    });
+
+    it('配置文件损坏返回 null 并警告', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      await fs.writeFile(config.SERVE_CONFIG_PATH, 'not-json{{{');
+      expect(await readServeConfig()).toBeNull();
+      expect(spy).toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it('端口越界或非整数返回 null', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      for (const bad of [{ port: 0 }, { port: 70000 }, { port: 'x' }, {}, null]) {
+        await fs.writeFile(config.SERVE_CONFIG_PATH, JSON.stringify(bad));
+        expect(await readServeConfig()).toBeNull();
+      }
+      expect(spy).toHaveBeenCalled();
+      spy.mockRestore();
+    });
+  });
+
+  // ─── 端口优先级 ───
+
+  describe('resolvePort 优先级', () => {
+    const origEnv = process.env.CLAUDE_SWITCH_PORT;
+    afterEach(() => {
+      if (origEnv) process.env.CLAUDE_SWITCH_PORT = origEnv;
+      else delete process.env.CLAUDE_SWITCH_PORT;
+    });
+
+    it('-p 优先，标记为显式', async () => {
+      process.env.CLAUDE_SWITCH_PORT = '9999';
+      await writeServeConfig(4444);
+      expect(await resolvePort('8080')).toEqual({ port: 8080, explicit: true });
+    });
+
+    it('环境变量次之，标记为显式', async () => {
+      process.env.CLAUDE_SWITCH_PORT = '9999';
+      await writeServeConfig(4444);
+      expect(await resolvePort()).toEqual({ port: 9999, explicit: true });
+    });
+
+    it('未显式指定时使用保存的端口，标记为自动', async () => {
+      delete process.env.CLAUDE_SWITCH_PORT;
+      await writeServeConfig(4444);
+      expect(await resolvePort()).toEqual({ port: 4444, explicit: false });
+    });
+
+    it('无任何配置时默认 3333，标记为自动', async () => {
+      delete process.env.CLAUDE_SWITCH_PORT;
+      expect(await resolvePort()).toEqual({ port: 3333, explicit: false });
+    });
+
+    it('非数字端口报错', async () => {
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code: any) => {
+        throw new Error(`process.exit(${code})`);
+      });
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      await expect(resolvePort('abc')).rejects.toThrow(/process\.exit/);
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('0-65535'));
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it('超范围端口报错，0 合法表示系统随机', async () => {
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code: any) => {
+        throw new Error(`process.exit(${code})`);
+      });
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      await expect(resolvePort('99999')).rejects.toThrow(/process\.exit/);
+      await expect(resolvePort('-1')).rejects.toThrow(/process\.exit/);
+      expect(await resolvePort('0')).toEqual({ port: 0, explicit: true });
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
     });
   });
 
@@ -261,6 +317,76 @@ describe('serve 命令', () => {
     });
   });
 
+  // ─── 端口回退 ───
+
+  describe('端口回退', () => {
+    it('自动模式下起始端口被占用时改用下一个端口并持久化', async () => {
+      const basePort = 21000 + Math.floor(Math.random() * 500);
+      const blocker = net.createServer().listen(basePort);
+      await new Promise(resolve => blocker.once('listening', resolve));
+
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code: any) => { return code as never; });
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      serve.startForeground(basePort, { explicit: false });
+
+      const pidInfo = await serve._internal.waitForPidFile(3000);
+      expect(pidInfo).not.toBeNull();
+      expect(pidInfo!.port).toBe(basePort + 1);
+      expect(await readServeConfig()).toBe(basePort + 1);
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining(`端口 ${basePort} 已被占用`));
+
+      await new Promise<void>((resolve, reject) => {
+        http.get(`http://localhost:${pidInfo!.port}/api/presets`, (res) => {
+          expect(res.statusCode).toBe(200);
+          resolve();
+        }).on('error', reject);
+      });
+
+      cleanupSignalHandlers();
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+      await new Promise(resolve => blocker.close(resolve));
+    }, 10000);
+
+    it('显式端口被占用时报错退出且不写入配置', async () => {
+      const port = 22000 + Math.floor(Math.random() * 500);
+      const blocker = net.createServer().listen(port);
+      await new Promise(resolve => blocker.once('listening', resolve));
+
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code: any) => { return code as never; });
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      serve.startForeground(port, { explicit: true });
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      expect(await readPidFile()).toBeNull();
+      expect(await readServeConfig()).toBeNull();
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('已被占用'));
+
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+      cleanupSignalHandlers();
+      await new Promise(resolve => blocker.close(resolve));
+    }, 10000);
+
+    it('端口 0（系统随机）成功后不持久化', async () => {
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code: any) => { return code as never; });
+
+      serve.startForeground(0, { explicit: true });
+
+      const pidInfo = await serve._internal.waitForPidFile(3000);
+      expect(pidInfo).not.toBeNull();
+      expect(pidInfo!.port).toBeGreaterThan(0);
+      expect(await readServeConfig()).toBeNull();
+
+      cleanupSignalHandlers();
+      exitSpy.mockRestore();
+    }, 10000);
+  });
+
   // ─── 6.4 stop 测试 ───
 
   describe('stop', () => {
@@ -368,6 +494,22 @@ describe('serve 命令', () => {
       await serve.stop();
       const pidInfoAfter = await readPidFile();
       expect(pidInfoAfter).toBeNull();
+    }, 20000);
+
+    it('自动模式下起始端口被占用时 daemon 改用下一个端口', async () => {
+      const basePort = 23000 + Math.floor(Math.random() * 500);
+      const blocker = net.createServer().listen(basePort);
+      await new Promise(resolve => blocker.once('listening', resolve));
+
+      await serve.startDaemon(basePort, { explicit: false });
+
+      const pidInfo = await readPidFile();
+      expect(pidInfo).not.toBeNull();
+      expect(pidInfo!.port).toBe(basePort + 1);
+      expect(await readServeConfig()).toBe(basePort + 1);
+
+      await serve.stop();
+      await new Promise(resolve => blocker.close(resolve));
     }, 20000);
   });
 
